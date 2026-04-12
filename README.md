@@ -1,3 +1,4 @@
+
 # Tabletop RPG Space Combat Management System
 
 A local frontend prototype for managing spaceship combat in a tabletop RPG environment. Built with React, this application provides a simple interface for players to manage ship attributes and calculate combat effects.
