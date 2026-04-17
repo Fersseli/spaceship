@@ -46,7 +46,7 @@ export const shipsDatabase = {
 
 // Lista de naves disponíveis para seleção
 export const shipsList = [
-  { id: "hawthorne_iii", label: "Hawthorne III" },
+  { id: "hawthorne_iii", label: "MS Hawthorne III" },
   { id: "valkyrie_nova", label: "Valkyrie Nova" },
   { id: "orion_vx", label: "Orion VX" }
 ];

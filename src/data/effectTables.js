@@ -25,8 +25,8 @@ export const effectTables = {
 
   // Tabela de controles: modificam precisão e manobra
   controls: {
-    0: "No Bonus",
-    1: "-25%",
+    0: "-25%",
+    1: "-20%",
     2: "-10%",
     3: "0%",
     4: "+5%",

@@ -1,0 +1,97 @@
+.admin-login-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  /* Espaço sideral azulado com degradê de estrela */
+  background: radial-gradient(circle at 80% 20%, #9ab5c8 0%, #0a1520 60%);
+  position: relative;
+  overflow: hidden;
+  padding-left: 90px;
+}
+
+/* O Planeta em Sombra */
+.admin-login-screen::before {
+  content: '';
+  position: absolute;
+  width:  1200px;
+  height: 1200px;
+  background: #000;
+  border-radius: 50%;
+  left: -100px;
+  /* Brilho atmosférico sutil na borda iluminada */
+  box-shadow: inset -20px 20px 50px rgba(74, 158, 255, 0.2), 
+              0 0 30px rgba(74, 158, 255, 0.1);
+  z-index: 0;
+}
+
+.admin-container {
+  position: relative;
+  z-index: 1;
+  background: rgba(0, 0, 0, 0.85);
+  border: 2px solid #ffffff; /* Borda azulada temática */
+  padding: 3rem;
+  width: 100%;
+  max-width: 420px;
+  backdrop-filter: blur(15px);
+  box-shadow: 0 0 50px rgba(74, 158, 255, 0.2);
+}
+
+.admin-subtitle {
+  text-align: center;
+  color: #4a9eff;
+  font-size: 0.7rem;
+  letter-spacing: 5px;
+  margin-bottom: 2rem;
+  font-weight: bold;
+}
+
+.admin-message {
+  padding: 1rem;
+  background: rgba(74, 158, 255, 0.1);
+  border: 1px solid #4a9eff;
+  color: #fff;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+.admin-back-btn {
+  background: transparent;
+  border: none;
+  color: #888;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.6rem;
+  cursor: pointer;
+  margin-top: 1rem;
+  letter-spacing: 2px;
+  transition: color 0.3s;
+}
+
+.admin-back-btn:hover {
+  color: #fff;
+}
+
+/* Responsivo: Centralização em Mobile ou Janelas Minimizadas */
+@media (max-width: 480px) {
+  .admin-login-screen {
+    /* Remove o recuo da sidebar que empurra o box para a direita */    
+    /* Garante que o container ocupe o centro exato */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .admin-container {
+    /* Ajusta a largura para não encostar nas bordas do celular */
+    width: 88%;
+    max-width: 340px;
+    padding: 2.5rem 1.5rem;
+  }
+
+  /* Ajuste opcional para a sidebar não sobrepor o texto no mobile */
+  .hazard-sidebar {
+    width: 45px;
+  }
+}

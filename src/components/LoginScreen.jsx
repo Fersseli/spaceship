@@ -1,67 +1,154 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import "../styles/LoginScreen.css";
 import { rolesList } from "../utils/rolePermissions";
 import { shipsList } from "../data/ships";
+import { playersList } from "../utils/players";
+import AdminLogin from "./AdminLogin";
+import AdminDashboard from "./AdminDashboard";
 
-// Tela de login inicial onde o jogador define seu apelido, papel e nave
 const LoginScreen = ({ onLoginSuccess }) => {
-  // Estado para armazenar o apelido do jogador
-  const [nickname, setNickname] = useState("");
+  // Estados para o sistema de Admin Oculto
+  const [failCount, setFailCount] = useState(0);
+  const [showAdminMode, setShowAdminMode] = useState(false);
+  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
 
-  // Estado para armazenar o papel selecionado (pilot, copilot, gunner)
-  const [selectedRole, setSelectedRole] = useState("pilot");
+  useEffect(() => {
+    document.body.style.cursor = "url('/normal.cur'), auto";
+    return () => {
+      document.body.style.cursor = "default";
+    };
+  }, []);
 
-  // Estado para armazenar a nave selecionada
+  const [nickname, setNickname] = useState(playersList[0].id);
+  const [password, setPassword] = useState("");
+  const [selectedRole, setSelectedRole] = useState("piloto");
   const [selectedShip, setSelectedShip] = useState("hawthorne_iii");
-
-  // Estado para controlar mensagens de erro
   const [error, setError] = useState("");
 
-  // Função para validar e processar o login
   const handleEnter = (e) => {
     e.preventDefault();
 
-    // Valida se o apelido não está vazio
-    if (nickname.trim() === "") {
-      setError("Please enter a nickname");
+    const player = playersList.find((p) => p.id === nickname);
+
+    // Validação de Senha e Gatilho do Admin
+    if (!player || password !== player.password) {
+      setError("Senha incorreta.");
+      
+      const newCount = failCount + 1;
+      setFailCount(newCount);
+      
+      // Se errar 5 vezes, libera o acesso ao terminal restrito
+      if (newCount >= 5) {
+        setShowAdminMode(true);
+      }
       return;
     }
 
-    // Limpa mensagens de erro
+    // Validação de Co-piloto Único
+    if (selectedRole === "copiloto") {
+      const isCopilotTaken = playersList.some((p) => {
+        if (p.id === nickname) return false;
+        const isOnline = localStorage.getItem(`status_${p.id}`) === "online";
+        const role = localStorage.getItem(`role_${p.id}`);
+        return isOnline && role === "copiloto";
+      });
+
+      if (isCopilotTaken) {
+        setError("Acesso Negado: Já existe um co-piloto online nesta nave.");
+        return;
+      }
+    }
+
     setError("");
 
-    // Chama o callback com os dados do jogador
+    // Persistência da Nave Escolhida (ou Hawthorne por padrão)
+    localStorage.setItem(`ship_${nickname}`, selectedShip);
+
     onLoginSuccess({
-      nickname: nickname.trim(),
+      nickname: nickname,
       role: selectedRole,
-      ship: selectedShip
+      ship: selectedShip,
+      des: player.des,
+      esq: player.esq,
     });
   };
 
+  // Renderização Condicional: Dashboard do Admin
+  if (isAdminLoggedIn) {
+    return (
+      <AdminDashboard 
+        onLogout={() => {
+          // Apenas desloga o admin, mas mantém a tela de login do admin ativa
+          setIsAdminLoggedIn(false);
+          // GARANTE que o modo admin continue ativo para não voltar ao login civil
+          setShowAdminMode(true); 
+        }} 
+      />
+    );
+  }
+
+  // Renderização Condicional: Tela de Login do Admin
+  if (showAdminMode) {
+    return (
+      <AdminLogin 
+        onAdminSuccess={() => setIsAdminLoggedIn(true)}
+        onBack={() => {
+          setShowAdminMode(false);
+          setFailCount(0);
+        }} 
+      />
+    );
+  }
+
+  // Tela de Login Padrão
   return (
     <div className="login-screen">
+      <div className="hazard-sidebar">
+        <div className="hazard-title">HEAVEN'S DOOR</div>
+        <div className="hazard-stripes"></div>
+      </div>
       <div className="login-container">
-        <h1 className="login-title">Space Combat System</h1>
-        <p className="login-subtitle">Enter the battlefield commander</p>
+        <h1 className="login-title">HEAVEN'S SYSTEMS</h1>
+        <p className="login-subtitle">Aliste-se, comandante!</p>
 
         <form onSubmit={handleEnter} className="login-form">
-          {/* Campo de entrada para o apelido do jogador */}
           <div className="form-group">
-            <label htmlFor="nickname">Nickname:</label>
-            <input
-              type="text"
+            <label htmlFor="nickname">Codinome:</label>
+            <select
               id="nickname"
               value={nickname}
-              onChange={(e) => setNickname(e.target.value)}
-              placeholder="Enter your nickname"
+              onChange={(e) => {
+                setNickname(e.target.value);
+                setPassword("");
+                setError("");
+              }}
+              className="form-select"
+            >
+              {playersList.map((player) => (
+                <option key={player.id} value={player.id}>
+                  {player.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="password">Senha:</label>
+            <input
+              type="password"
+              id="password"
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                setError("");
+              }}
+              placeholder="••••••••"
               className="form-input"
-              maxLength="30"
             />
           </div>
 
-          {/* Seletor de papel do jogador */}
           <div className="form-group">
-            <label htmlFor="role">Role:</label>
+            <label htmlFor="role">CARGO:</label>
             <select
               id="role"
               value={selectedRole}
@@ -76,9 +163,8 @@ const LoginScreen = ({ onLoginSuccess }) => {
             </select>
           </div>
 
-          {/* Seletor de nave */}
           <div className="form-group">
-            <label htmlFor="ship">Ship:</label>
+            <label htmlFor="ship">NAVE:</label>
             <select
               id="ship"
               value={selectedShip}
@@ -93,12 +179,10 @@ const LoginScreen = ({ onLoginSuccess }) => {
             </select>
           </div>
 
-          {/* Exibe mensagens de erro se houver */}
           {error && <div className="error-message">{error}</div>}
 
-          {/* Botão para entrar no jogo */}
           <button type="submit" className="login-button">
-            Enter
+            Start
           </button>
         </form>
       </div>

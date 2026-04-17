@@ -1,0 +1,420 @@
+/* 1. O Fundo e a Tela Principal Travada */
+.admin-dashboard-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh; /* Travado! Substituiu o min-height */
+  background: radial-gradient(circle at 80% 20%, #9ab5c8 0%, #0a1520 60%);
+  position: relative;
+  overflow: hidden; /* Impede a rolagem da página inteira */
+  padding-left: 70px; /* Libera o espaço exato da barra lateral */
+}
+
+.admin-dashboard-screen::before {
+  content: '';
+  position: absolute;
+  width:  1200px;
+  height: 1200px;
+  background: #000;
+  border-radius: 50%;
+  left: -100px;
+  box-shadow: inset -20px 20px 50px rgba(74, 158, 255, 0.2), 
+              0 0 30px rgba(74, 158, 255, 0.1);
+  z-index: 0;
+}
+
+/* --- O NOVO ENVOLVÓRIO DO DATAPAD --- */
+/* 2. O Envoltório da Pasta (Datapad) */
+.admin-datapad-wrapper {
+  position: relative;
+  display: flex;
+  width: 90%;
+  max-width: 1200px;
+  height: 85vh; /* A pasta agora tem altura estática fixa! */
+  background: #090a0c; 
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+  z-index: 10; /* Traz a pasta para a frente da barra lateral */
+  box-shadow: 0 15px 50px rgba(0, 0, 0, 0.8);
+  margin-left: 50px; /* Dá espaço de sobra para o botão X aparecer */
+}
+
+/* 3. A ABA DE FECHAR (BOTÃO X) */
+.datapad-close-btn {
+  position: absolute;
+  left: -40px; 
+  top: 15px;
+  width: 40px;
+  height: 50px;
+  background: #d0d0d0;
+  color: #000;
+  border: none;
+  font-size: 1.5rem;
+  font-weight: bold;
+  font-family: 'JetBrains Mono', monospace;
+  cursor: pointer;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 5px;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 0 85%);
+  border-top-left-radius: 3px;
+  border-bottom-left-radius: 3px;
+  transition: all 0.2s ease;
+  z-index: 20; /* Traz o botão para a camada mais alta */
+}
+
+.datapad-close-btn:hover {
+  background: #ffffff;
+}
+
+/* --- A LOMBADA ESQUERDA (A Régua) --- */
+.datapad-spine {
+  width: 30px;
+  border-right: 2px solid rgba(255, 255, 255, 0.6); /* Linha vertical forte */
+  position: relative;
+  flex-shrink: 0;
+}
+
+/* Os tracinhos horizontais da régua criados com gradiente */
+.datapad-spine::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 8px; /* Comprimento do tracinho */
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent,
+    transparent 38px,
+    rgba(255, 255, 255, 0.6) 38px,
+    rgba(255, 255, 255, 0.6) 40px
+  );
+}
+
+/* --- A LOMBADA DIREITA (Os pontinhos) --- */
+.datapad-right-spine {
+  width: 20px;
+  flex-shrink: 0;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent,
+    transparent 37px,
+    rgba(255, 255, 255, 0.3) 37px,
+    rgba(255, 255, 255, 0.3) 40px
+  );
+  background-size: 3px 100%;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+/* --- O CONTAINER DE CONTEÚDO --- */
+.admin-dashboard-container {
+  flex-grow: 1;
+  padding: 2rem 3rem; /* Reduzido um tiquinho para caber melhor na altura */
+  background: transparent;
+  border: none;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* Corta o que passar do tamanho da pasta */
+}
+
+/* --- TIPOGRAFIA ESTILO DOCUMENTO (Header) --- */
+.admin-header {
+  margin-bottom: 1.5rem;
+}
+
+.datapad-title {
+  font-size: 2rem;
+  color: #ffffff;
+  font-family: 'Orbitron', sans-serif;
+  letter-spacing: 1px;
+  margin-bottom: 0.8rem;
+  text-transform: capitalize; /* Para ficar igual a "Terrormorph Specimen" */
+}
+
+.datapad-metadata {
+  color: #b8b8b8;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+/* Aquele pequeno texto corrido para dar imersão */
+.datapad-divider {
+  color: #e8e8e8;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.9rem;
+  margin-bottom: 2rem;
+  padding-bottom: 2rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1); /* Linha sutil divisória */
+}
+
+.admin-logout-btn {
+  background: transparent;
+  border: 1px solid #ffffff;
+  color: #f1f1f1;
+  padding: 0.5rem 1.5rem;
+  cursor: pointer;
+  font-family: 'Orbitron', sans-serif;
+  transition: 0.3s;
+}
+
+.admin-logout-btn:hover {
+  background: #f3f4f5;
+  color: #000;
+}
+
+.admin-controls {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.sort-btn {
+  background: rgba(74, 158, 255, 0.1);
+  border: 1px solid rgba(236, 238, 240, 0.5);
+  color: #fff;
+  padding: 0.5rem 1rem;
+  font-size: 0.7rem;
+  cursor: pointer;
+  letter-spacing: 1px;
+}
+
+.sort-btn:hover {
+  background: rgba(255, 255, 255, 0.871);
+  color: #000;
+}
+
+/* Área de Rolagem 01 (Aba Tripulação) */
+.admin-table-container {
+  flex: 1; /* Ocupa o espaço que sobrar dentro da pasta */
+  min-height: 0; 
+  overflow-y: auto; /* A barra de rolagem aparece SÓ AQUI dentro */
+  padding-right: 10px;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+}
+
+.admin-table th {
+  text-align: left;
+  padding: 1rem;
+  color: #4a9eff;
+  border-bottom: 1px solid rgba(74, 158, 255, 0.3);
+}
+
+.admin-table td {
+  padding: 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.admin-table td:last-child {
+  text-align: center;
+  width: 100px;
+}
+
+.admin-table .sort-btn:hover {
+  background: rgba(255, 74, 74, 0.1) !important;
+  color: #ff4a4a !important;
+  border-color: #ff4a4a !important;
+}
+
+.status-indicator {
+  font-size: 0.65rem;
+  padding: 2px 8px;
+  border-radius: 2px;
+  font-weight: bold;
+}
+
+.status-indicator.online { background: #2a9aae; color: #fff; }
+.status-indicator.offline { background: #383d41; color: #888; }
+
+.row-online { background: rgba(74, 158, 255, 0.03); }
+.user-name { color: #fff; font-weight: bold; }
+.user-ship { color: #98fbff; }
+
+/* --- ESTILOS DAS ABAS --- */
+.admin-tabs {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  border-bottom: 1px solid rgba(74, 158, 255, 0.3);
+  padding-bottom: 1rem;
+}
+
+.admin-tab-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #888;
+  padding: 0.8rem 1.5rem;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.85rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  letter-spacing: 2px;
+}
+
+.admin-tab-btn:hover {
+  border-color: #fff;
+  color: #fff;
+}
+
+.admin-tab-btn.active {
+  background: rgba(74, 158, 255, 0.15);
+  border-color: #4a9eff;
+  color: #4a9eff;
+  box-shadow: 0 0 15px rgba(74, 158, 255, 0.2);
+}
+
+/* --- GRID ENGENHARIA MESTRE-DETALHE --- */
+/* 1. TRAVAR A GRID PRINCIPAL (Removemos o scroll daqui) */
+.fleet-engineering-grid {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 2rem;
+  flex: 1;
+  min-height: 0; 
+  overflow: hidden; /* A grid inteira fica estática e presa no Datapad */
+}
+
+/* 2. COLUNA ESQUERDA: Catálogo Fixo */
+.fleet-list-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%; /* Preenche a altura da grid */
+  overflow: hidden; /* Garante que o lado esquerdo não role a página */
+}
+
+/* (Opcional) Se um dia você tiver 50 naves, apenas os botões rolam, e não o painel todo */
+.fleet-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  overflow-y: auto; 
+  padding-right: 5px;
+}
+
+/* 3. COLUNA DIREITA: Console Rolável */
+.fleet-editor-panel {
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(230, 232, 235, 0.2);
+  padding: 2rem;
+  height: 100%; /* Força o console a respeitar o limite da grid */
+  overflow-y: auto; /* A MÁGICA AQUI: A barra de rolagem vai aparecer SÓ neste lado */
+}
+
+.fleet-panel-title {
+  color: #fff;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 2px solid #fff;
+  padding-bottom: 0.5rem;
+  letter-spacing: 2px;
+}
+
+
+.fleet-list-item {
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #b8b8b8;
+  cursor: pointer;
+  font-family: 'Orbitron', sans-serif;
+  transition: all 0.2s ease;
+  letter-spacing: 1px;
+}
+
+.fleet-list-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.fleet-list-item.selected {
+  background: rgba(74, 158, 255, 0.2);
+  border-color: #4a9eff;
+  color: #fff;
+  font-weight: bold;
+  box-shadow: inset 4px 0 0 #4a9eff;
+}
+
+/* COLUNA DIREITA (CONSOLE) */
+.fleet-editor-panel {
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(230, 232, 235, 0.2);
+  padding: 2rem;
+}
+
+.fleet-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.fleet-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.fleet-form-group label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  color: #4a9eff;
+  letter-spacing: 1px;
+}
+
+.fleet-input {
+  background: rgba(10, 15, 20, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  padding: 0.8rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1rem;
+  transition: 0.3s;
+}
+
+.fleet-input:focus {
+  outline: none;
+  border-color: #4a9eff;
+  box-shadow: 0 0 10px rgba(74, 158, 255, 0.2);
+}
+
+.fleet-input.locked {
+  color: #2a9aae;
+  border-color: transparent;
+  background: rgba(42, 154, 174, 0.1);
+}
+
+.fleet-input.highlight-input {
+  color: #e1ffb4; /* Cor verde para energia */
+  font-weight: bold;
+  font-size: 1.2rem;
+}
+
+.fleet-save-btn {
+  margin-top: 1rem;
+  padding: 1.2rem;
+  background: #fff;
+  color: #000;
+  border: none;
+  font-family: 'Orbitron', sans-serif;
+  font-weight: bold;
+  font-size: 0.9rem;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.fleet-save-btn:hover {
+  background: #4a9eff;
+  color: #fff;
+  box-shadow: 0 0 20px rgba(74, 158, 255, 0.4);
+}

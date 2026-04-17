@@ -1,125 +1,593 @@
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=JetBrains+Mono:wght@400;700&display=swap');
+
 .dashboard {
   min-height: 100vh;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-  display: flex;
-  flex-direction: column;
+  background: #0f1d23;
+  position: relative;
+  overflow: hidden;
+  font-family: 'Orbitron', sans-serif;
+  color: #e8e8e8;
 }
 
-.dashboard-header {
-  background: linear-gradient(90deg, rgba(0, 212, 255, 0.1) 0%, rgba(0, 0, 0, 0.3) 100%);
-  border-bottom: 2px solid rgba(0, 212, 255, 0.3);
-  padding: 20px 30px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+/* Fundo dinâmico com gradiente oval - variações de #0f1d23 */
+.dashboard::before {
+  content: '';
+  position: fixed;
+  top: -50%;
+  left: 50%;
+  width: 120%;
+  height: 150%;
+  transform: translateX(-50%);
+  background: radial-gradient(
+    ellipse 800px 600px at 50% 30%,
+    rgba(100, 140, 150, 0.15) 0%,
+    rgba(50, 80, 100, 0.08) 40%,
+    transparent 70%
+  );
+  pointer-events: none;
+  z-index: 0;
 }
 
-.header-info h1 {
-  font-size: 28px;
-  color: #00d4ff;
-  margin-bottom: 5px;
-  text-shadow: 0 0 10px rgba(0, 212, 255, 0.5);
-}
-
-.header-info p {
-  font-size: 14px;
-  color: #b0b0b0;
-}
-
-.logout-button {
-  padding: 10px 20px;
-  background: rgba(255, 100, 100, 0.2);
-  border: 1px solid rgba(255, 100, 100, 0.5);
-  color: #ff6464;
-  border-radius: 5px;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
-  transition: all 0.3s ease;
-}
-
-.logout-button:hover {
-  background: rgba(255, 100, 100, 0.4);
-  box-shadow: 0 4px 15px rgba(255, 100, 100, 0.2);
+.dashboard::after {
+  content: '';
+  position: fixed;
+  bottom: -30%;
+  right: -20%;
+  width: 900px;
+  height: 900px;
+  background: radial-gradient(
+    circle,
+    rgba(50, 80, 100, 0.1) 0%,
+    transparent 70%
+  );
+  pointer-events: none;
+  z-index: 0;
 }
 
 .dashboard-content {
-  flex: 1;
-  padding: 30px;
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
-  gap: 30px;
-  max-width: 1200px;
+}
+
+/* Header */
+.dashboard-header {
+  background: linear-gradient(180deg, rgba(15, 29, 35, 0.98) 0%, rgba(15, 29, 35, 0.85) 100%);
+  border-bottom: 2px solid #d0d0d0;
+  padding: 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  backdrop-filter: blur(10px);
+  position: relative;
+  box-shadow: 0 0 30px rgba(200, 200, 200, 0.1);
+}
+
+.header-info h1 {
+  font-size: 2.5rem;
+  font-weight: 900;
+  color: #ffffff;
+  text-transform: uppercase;
+  letter-spacing: 3px;
+  margin: 0;
+  text-shadow: 0 0 20px rgba(200, 200, 200, 0.3);
+}
+
+.header-info p {
+  font-size: 0.9rem;
+  color: #b8b8b8;
+  margin: 0.5rem 0 0 0;
+  letter-spacing: 1px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.logout-button-container {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.logout-text {
+  font-size: 0.85rem;
+  font-weight: 700;
+  font-family: 'Orbitron', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: #d0d0d0;
+}
+
+.logout-button {
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  background: transparent;
+  border: 2px solid #d0d0d0;
+  color: #d0d0d0;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1.5rem;
+  font-weight: 300;
+  font-family: 'Orbitron', sans-serif;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.logout-button:hover {
+  background: #ffffff;
+  border-color: #ffffff;
+  color: #000000;
+  transform: scale(1.05);
+}
+
+.logout-button:active {
+  transform: scale(0.95);
+}
+
+/* Main Content */
+.dashboard-main {
+  flex: 1;
+  padding: 3rem 2rem;
+  display: grid;
+  grid-template-columns: 1fr 2fr 1fr;
+  gap: 2rem;
+  max-width: 1600px;
   margin: 0 auto;
   width: 100%;
 }
 
-.attributes-section {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(0, 212, 255, 0.2);
-  border-radius: 10px;
-  padding: 25px;
+/* Painel Esquerdo - Atributos List */
+.attributes-list {
+  background: linear-gradient(135deg, rgba(15, 29, 35, 0.95) 0%, rgba(25, 40, 50, 0.85) 100%);
+  border: 2px solid #d0d0d0;
+  border-radius: 2px;
+  padding: 2rem;
   backdrop-filter: blur(10px);
+  box-shadow: 0 0 30px rgba(200, 200, 200, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
 }
 
-.attributes-section h2 {
-  font-size: 20px;
-  color: #00d4ff;
-  margin-bottom: 20px;
+.attributes-list h2 {
+  font-size: 1.2rem;
+  color: #ffffff;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin: 0;
+  border-bottom: 2px solid #d0d0d0;
+  padding-bottom: 1rem;
+}
+
+.attribute-item {
+  border-left: 3px solid #d0d0d0;
+  padding-left: 1rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.9rem;
+}
+
+.attribute-item-name {
+  color: #ffffff;
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 0.5rem;
+}
+
+.attribute-item-value {
+  display: flex;
+  align-items: center; /* Alinha o valor e o bônus verticalmente */
+  padding: 0.8rem;
+  background-color: rgba(58, 69, 73, 0.4); /* Fundo sutil da caixa */
+  border: 1px solid #3a4549; /* A cor de contorno solicitada */
+  border-radius: 0; /* Starfield usa bordas quadradas */
+  width: fit-content; /* A caixa se ajusta ao tamanho do texto */
+}
+.attribute-item-value span:first-child {
+  color: #ffffff !important; /* Força a cor branca solicitada */
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  margin-right: 1.5rem; /* Espaçamento entre o valor e o bônus */
+}
+.attribute-item-value span:last-child {
+  color: #e1ffb4 !important; /* A cor do bônus solicitada */
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+}
+
+.radar-container {
+  width: 100%;
+  background: rgba(0, 247, 255, 0.03);
+  border: 1px solid rgba(255, 123, 0, 0.1);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.ship-title-container {
+  display: flex;
+  align-items: center; /* Alinha verticalmente no centro */
+  gap: 1.5rem; /* Espaçamento entre a imagem e o texto */
+  margin-bottom: 0.5rem; /* Espaçamento para o parágrafo debaixo */
+}
+
+/* A Imagem Quadrada (256.png) */
+.ship-header-icon {
+  width: 70px; 
+  object-fit: cover; /* Garante que a imagem preencha o quadrado sem distorcer */
+  border: 1px solid rgba(255, 255, 255, 0.1); /* Borda muito sutil estilo Starfield */
+  background-color: rgba(0, 0, 0, 0.2); /* Fundo sutil */
+  border-radius: 0; /* Starfield usa bordas quadradas */
+}
+
+
+/* Central - Ship Control Panel */
+.ship-control-panel {
+  background: linear-gradient(135deg, rgba(15, 29, 35, 0.98) 0%, rgba(25, 40, 50, 0.90) 100%);
+  border: 3px solid #d0d0d0;
+  border-radius: 2px;
+  padding: 2.5rem;
+  backdrop-filter: blur(15px);
+  box-shadow: 
+    0 0 40px rgba(200, 200, 200, 0.15),
+    inset 0 0 20px rgba(200, 200, 200, 0.05);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2rem;
+}
+
+.ship-title {
+  text-align: center;
+  color: #ffffff;
+  margin: 0;
+}
+
+.ship-title h2 {
+  font-size: 1.3rem;
+  text-transform: uppercase;
+  letter-spacing: 3px;
+  margin: 0;
+  text-shadow: 0 0 10px rgba(200, 200, 200, 0.3);
+}
+
+.ship-title p {
+  font-size: 0.75rem;
+  color: #b8b8b8;
+  margin: 0.3rem 0 0 0;
+  letter-spacing: 2px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Grid de Controles */
+.control-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr); /* 5 colunas para os 5 atributos */
+  gap: 0.5rem; /* Reduzi o gap para caber melhor lateralmente */
+  width: 100%;
+  max-width: 800px; /* Aumente o max-width para acomodar a largura maior */
+}
+
+.control-slot {
+  background: rgba(200, 200, 200, 0.05);
+  border: 1px solid rgba(208, 208, 208, 0.4);
+  padding: 1rem 0.5rem;
+  display: flex;
+  flex-direction: column-reverse; /* Inverte: Label embaixo, barras em cima */
+  align-items: center;
+  gap: 0.8rem;
+  transition: all 0.3s ease;
+  min-height: 200px; /* Garante uma altura mínima para parecer um "fader" */
+}
+
+.control-slot:hover {
+  
+  background: linear-gradient(135deg, rgba(200, 200, 200, 0.2) 0%, rgba(150, 150, 150, 0.1) 100%);
+  border-color: #ffffff;
+  box-shadow: 0 0 20px rgba(200, 200, 200, 0.3);
+  transform: scale(1.05);
+}
+.control-slot:hover .control-slot-label {
+  background: #ffffff;
+  color: #000000;
+}
+
+
+.control-slot-label {
+  font-size: 0.8rem;
+  font-weight: bold;
+  border: 1px solid #d0d0d0;
+  padding: 2px 5px;
+  width: 100%;
+  text-align: center;
+}
+
+
+.control-slot-bars {
+  display: flex;
+  flex-direction: column-reverse; /* Faz as barras empilharem de baixo para cima */
+  gap: 2px;
+  height: 120px; /* Altura fixa para o receptáculo das barras */
+  justify-content: flex-start;
+  align-items: center;
+  padding: 10px 5px;
+}
+
+.control-bar {
+  width: 45px;
+  height: 12px;
+  background: rgba(200, 200, 200, 0.05); /* Mais transparente quando vazio */
+  border: 1px solid rgba(255, 255, 255, 0.1); /* Borda bem sutil */
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+
+.control-bar.active {
+  background: #98fbff;
+  box-shadow: 0 0 15px rgba(152, 251, 255, 0.6);
+  border-color: transparent; /* Remove a borda quando ativo para brilhar mais */
+}
+
+/* Display Central */
+/* --- INÍCIO DA SUBSTITUIÇÃO DO CSS CENTRAL --- */
+
+/* --- INÍCIO DA ATUALIZAÇÃO DO CSS DO DISPLAY CENTRAL --- */
+
+.ship-display {
+  background: rgba(10, 15, 20, 0.95);
+  border: 2px solid rgba(208, 208, 208, 0.6);
+  border-radius: 2px;
+  padding: 0.5rem 1rem;
+  width: 100%;
+  max-width: 800px;
+  box-shadow: inset 0 0 20px rgba(200, 200, 200, 0.08);
+  
+  /* Flexbox para alinhar o conteúdo */
+  display: flex;
+  justify-content: flex-start; /* IMPORTANTE: Alinha tudo à esquerda (início) */
+  align-items: center;
+  gap: 0; /* Remove gap, pois não há mais setas */
+}
+
+/* Container que agrupa os 14 palitos, agora encostado na esquerda */
+.point-selector-grid {
+  display: flex;
+  gap: 6px; /* Espaçamento sutil entre os palitos */
+  height: 40px; /* Mantém a altura total da área */
+  justify-content: flex-start; /* Alinha os palitos dentro do container à esquerda */
+  align-items: center;
+  padding-left: 5px; /* Sutil recuo da borda esquerda */
+}
+
+/* O Retângulo Vertical (Palito), igual ao HUD original */
+.point-segment {
+  width: 8px; /* Largura fina para ser vertical */
+  height: 25px; /* Altura maior para ficar "em pé" */
+  
+  /* Cor quando está disponível (vazio/apagado) */
+  background: rgba(200, 200, 200, 0.15); 
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: all 0.2s ease-in-out;
+}
+
+/* O Retângulo Vertical Ativo (Cheio/Azul) */
+.point-segment.active {
+  background: #98fbff; /* Azul Starfield */
+  height: 30px; /* Sutilmente maior quando ativo para dar destaque */
+  box-shadow: 
+    0 0 12px rgba(152, 251, 255, 0.7),
+    0 0 4px rgba(255, 255, 255, 0.5);
+  border-color: #ffffff;
+}
+
+
+/* Painel Direito - Player Info */
+.player-info-panel {
+  background: linear-gradient(135deg, rgba(15, 29, 35, 0.95) 0%, rgba(25, 40, 50, 0.85) 100%);
+  border: 2px solid #d0d0d0;
+  border-radius: 2px;
+  padding: 2rem;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 0 30px rgba(200, 200, 200, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.player-info-section {
+  border-left: 3px solid #d0d0d0;
+  padding-left: 1rem;
+}
+
+.player-info-label {
+  font-size: 0.75rem;
+  color: #b8b8b8;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-family: 'JetBrains Mono', monospace;
+  margin-bottom: 0.3rem;
+}
+
+.player-info-value {
+  font-size: 1.1rem;
+  color: #ffffff;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+/* HP Bar */
+.hp-container {
+  margin-top: 1rem;
+}
+
+.hp-label {
+  font-size: 0.7rem;
+  color: #b8b8b8;
+  margin-bottom: 0.5rem;
   text-transform: uppercase;
   letter-spacing: 1px;
 }
 
-.attributes-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 20px;
-  margin-bottom: 25px;
+.hp-bar-bg {
+  width: 100%;
+  height: 0.5rem;
+  background: rgba(200, 200, 200, 0.1);
+  border: 1px solid #d0d0d0;
+  position: relative;
+  overflow: hidden;
 }
 
-.remaining-points {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  padding-top: 20px;
-  border-top: 1px solid rgba(0, 212, 255, 0.2);
+.hp-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #b0b0b0, #ffffff);
+  transition: width 0.5s ease;
+  box-shadow: 0 0 10px rgba(200, 200, 200, 0.6);
 }
 
-.points-label {
-  font-size: 16px;
-  font-weight: 600;
-  color: #00d4ff;
+.remaining-points-box {
+  background: linear-gradient(135deg, rgba(200, 200, 200, 0.1) 0%, rgba(150, 150, 150, 0.05) 100%);
+  border: 2px solid #d0d0d0;
+  padding: 1rem;
+  text-align: center;
+  border-radius: 2px;
+  margin-top: auto;
+  box-shadow: inset 0 0 10px rgba(200, 200, 200, 0.08);
 }
 
-.points-value {
-  font-size: 24px;
-  font-weight: 700;
-  color: #00ff00;
-  padding: 5px 15px;
-  background: rgba(0, 255, 0, 0.1);
-  border: 1px solid rgba(0, 255, 0, 0.3);
-  border-radius: 5px;
+.remaining-label {
+  font-size: 0.7rem;
+  color: #b8b8b8;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 0.5rem;
 }
 
-.points-value.fully-used {
-  color: #ffaa00;
-  background: rgba(255, 170, 0, 0.1);
-  border-color: rgba(255, 170, 0, 0.3);
+.remaining-value {
+  font-size: 2rem;
+  color: #98fbff;
+  font-weight: 900;
+  font-family: 'JetBrains Mono', monospace;
+  text-shadow: 0 0 15px rgba(200, 200, 200, 0.4);
 }
 
+.points-counter {
+  margin-left: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  letter-spacing: 1px;
+}
+.points-used {
+  color: #98fbff;
+}
+
+.points-total {
+  color: rgba(152, 251, 255, 0.35);
+}
+
+.player-info-value--small {
+  font-size: 0.85rem;
+}
+
+@media (max-width: 1200px) {
+  .dashboard-main {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+    padding: 2rem 1rem;
+  }
+ 
+  .header-info h1 {
+    font-size: 2rem;
+  }
+ 
+  .control-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+ 
+  .ship-display {
+    max-width: 100%;
+    padding: 0.5rem;
+  }
+}
+ 
 @media (max-width: 768px) {
   .dashboard-header {
     flex-direction: column;
-    gap: 15px;
+    gap: 1rem;
     align-items: flex-start;
+    padding: 1.5rem;
   }
+ 
+  .player-info-panel  { order: 1; }
+  .ship-control-panel { order: 2; }
+  .attributes-list    { order: 3; }
 
-  .dashboard-content {
-    padding: 20px;
+  .header-info h1 {
+    font-size: 1.5rem;
+    letter-spacing: 2px;
   }
-
-  .attributes-grid {
+ 
+  .dashboard-main {
     grid-template-columns: 1fr;
+    gap: 1rem;
+    padding: 1rem;
+  }
+ 
+  .attributes-list,
+  .player-info-panel {
+    padding: 1.5rem;
+  }
+ 
+  .ship-control-panel {
+    padding: 1.5rem;
+  }
+ 
+  .control-grid {
+    grid-template-columns: repeat(2, 1fr);
+    max-width: 100%;
+    gap: 0.8rem;
+  }
+ 
+  .control-slot {
+    padding: 0.8rem;
+  }
+ 
+  .remaining-value {
+    font-size: 1.5rem;
+  }
+ 
+  .point-segment {
+    height: 8px;
+  }
+}
+ 
+@media (max-width: 480px) {
+  .dashboard::before {
+    width: 150%;
+    height: 200%;
+  }
+ 
+  .header-info h1 {
+    font-size: 1.2rem;
+  }
+ 
+  .header-info p {
+    font-size: 0.75rem;
+  }
+ 
+  .control-grid {
+    grid-template-columns: 1fr;
+    gap: 0.6rem;
+  }
+ 
+  .attributes-list,
+  .player-info-panel,
+  .ship-control-panel {
+    padding: 1rem;
+    border-width: 1px;
   }
 }

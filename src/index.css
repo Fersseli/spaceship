@@ -1,11 +1,31 @@
-html, body {
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  padding: 0;
+/* Customização da Barra de Scroll Global */
+::-webkit-scrollbar {
+  width: 14px; /* Aumentamos a largura total para dar espaço ao recuo */
+  height: 14px;
 }
 
-#root {
-  width: 100%;
-  height: 100%;
+/* Fundo da barra (Track) */
+::-webkit-scrollbar-track {
+  background: transparent; /* Mantém o fundo invisível */
 }
+
+/* O "pegador" da barra (Thumb) */
+::-webkit-scrollbar-thumb {
+  /* Cor branca sólida com opacidade para não ficar cinza */
+  background-color: rgba(51, 49, 49, 0.781); 
+  
+  /* CRUCIAL: Cria o efeito de estar "mais para a esquerda" */
+  /* A borda transparente empurra a cor para dentro do container */
+  border: 4px solid transparent;
+  background-clip: padding-box;
+  
+  border-radius: 10px;
+  transition: background 0.3s ease;
+}
+
+/* Efeito ao passar o mouse ou clicar */
+::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:active {
+  background-color: rgba(255, 255, 255, 0.9); /* Branco intenso ao interagir */
+}
+
