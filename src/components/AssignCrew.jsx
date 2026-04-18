@@ -1,32 +1,37 @@
 import React, { useState, useEffect } from "react";
 import { playersList } from "../utils/players";
+import { getShipData } from "../utils/mockApi";
 import "../styles/AssignCrew.css";
+import { removePlayerFromAllCrews } from "../utils/mockApi"; // Adicione o import para a função de limpeza de tripulação
 
-const TORRETAS = [
-  { id: "esquerda", label: "Torreta Esquerda", capabilities: ["Tiro"] },
-  { id: "centro",   label: "Torreta Centro",   capabilities: ["Tiro", "Míssil"] },
-  { id: "direita",  label: "Torreta Direita",  capabilities: ["Tiro"] },
-];
 
 const CREW_STORAGE_KEY = "crew_assignments";
 
-const loadAssignments = () => {
+const loadAssignments = (shipId) => {
   try {
-    const raw = localStorage.getItem(CREW_STORAGE_KEY);
+    // Cada nave tem seu próprio espaço de atribuições no storage
+    const raw = localStorage.getItem(`${CREW_STORAGE_KEY}_${shipId}`);
     return raw ? JSON.parse(raw) : { copiloto: null, torretas: {} };
   } catch {
     return { copiloto: null, torretas: {} };
   }
 };
 
-const saveAssignments = (data) => {
-  localStorage.setItem(CREW_STORAGE_KEY, JSON.stringify(data));
+const saveAssignments = (shipId, data) => {
+  localStorage.setItem(`${CREW_STORAGE_KEY}_${shipId}`, JSON.stringify(data));
 };
 
 const AssignCrew = ({ currentPlayer, currentRole, onClose }) => {
   const isPilot = currentRole === "piloto";
+  const shipId = currentPlayer.ship;
 
-  const [assignments, setAssignments] = useState(loadAssignments);
+  // Puxa a configuração da nave diretamente do banco
+  const shipInfo = getShipData(shipId);
+  const crewConfig = shipInfo?.crew;
+  const TORRETAS = crewConfig?.torretas ?? [];
+  const hasCopiloto = crewConfig?.hasCopiloto ?? true;
+
+  const [assignments, setAssignments] = useState(() => loadAssignments(shipId));
   const [onlineMap, setOnlineMap] = useState({});
   const [error, setError] = useState("");
 
@@ -39,100 +44,103 @@ const AssignCrew = ({ currentPlayer, currentRole, onClose }) => {
       });
       setOnlineMap(map);
     };
-
     readOnline();
     const interval = setInterval(readOnline, 3000);
     return () => clearInterval(interval);
   }, []);
 
-  // Jogadores que não são o piloto atual
-  const otherPlayers = playersList.filter((p) => p.id !== currentPlayer.nickname);
+  // Filtra jogadores da mesma nave. Se ship_ não estiver salvo ainda,
+  // assume hawthorne_iii (padrão do sistema).
+  const crewPlayers = playersList.filter((p) => {
+    if (p.id === currentPlayer.nickname) return false;
+    const savedShip = localStorage.getItem(`ship_${p.id}`) || "hawthorne_iii";
+    return savedShip === shipId;
+  });
+
+  // --- HANDLERS ---
 
   const handleSetCopiloto = (playerId) => {
-    if (!isPilot) return;
+    if (!isPilot || !hasCopiloto) return;
     setError("");
-
     setAssignments((prev) => {
-      // Se ele já é copiloto e estamos clicando de novo, apenas remove o cargo (toggle)
       if (prev.copiloto === playerId) {
         return { ...prev, copiloto: null };
       }
-
-      // Se ele está virando copiloto agora, removemos de qualquer torreta
+      // Remove da torreta se estava lá
       const newTorretas = { ...prev.torretas };
       Object.keys(newTorretas).forEach((t) => {
         if (newTorretas[t] === playerId) delete newTorretas[t];
       });
-
-      return {
-        ...prev,
-        copiloto: playerId,
-        torretas: newTorretas,
-      };
+      return { ...prev, copiloto: playerId, torretas: newTorretas };
     });
   };
 
   const handleSetTorreta = (playerId, torretaId) => {
     if (!isPilot) return;
-
     setAssignments((prev) => {
-      // --- NOVO: Impede que o copiloto assuma uma torreta ---
-      if (prev.copiloto === playerId) {
+      // Na Hawthorne: copiloto não pode também estar numa torreta
+      if (hasCopiloto && prev.copiloto === playerId) {
         setError("O co-piloto não pode assumir posições em torretas simultaneamente.");
         return prev;
       }
-      // ------------------------------------------------------
-      
       setError("");
       const newTorretas = { ...prev.torretas };
 
-      // Remove jogador de qualquer torreta que já esteja
+      // Remove de qualquer torreta que já esteja
       Object.keys(newTorretas).forEach((t) => {
         if (newTorretas[t] === playerId) delete newTorretas[t];
       });
 
-      // Se clicou na torreta que já era dele, só remove (toggle)
-      const current = prev.torretas[torretaId];
-      if (current === playerId) return { ...prev, torretas: newTorretas };
+      // Toggle: se já era desta torreta, só remove
+      if (prev.torretas[torretaId] === playerId) {
+        return { ...prev, torretas: newTorretas };
+      }
 
-      // Se a torreta já tem outro jogador, libera ela
+      // Na Vanguard (sem copiloto separado): torreta central = posto de co-piloto
+      // Apenas um jogador pode ocupar a torreta central
       newTorretas[torretaId] = playerId;
-
       return { ...prev, torretas: newTorretas };
     });
   };
 
   const handleSave = () => {
-    if (!assignments.copiloto) {
-      setError("É necessário ter um co-piloto para salvar.");
+    // Validação: Hawthorne exige copiloto; Vanguard exige torreta central ocupada
+    if (hasCopiloto && !assignments.copiloto) {
+      setError("É necessário definir um co-piloto para salvar.");
+      return;
+    }
+    if (!hasCopiloto && !assignments.torretas["centro"]) {
+      setError("É necessário atribuir um tripulante à Torreta Central.");
       return;
     }
 
-    // --- NOVO: Promove e despromove jogadores em tempo real ---
-    
-    // 1. O jogador escolhido é promovido a co-piloto no sistema
-    localStorage.setItem(`role_${assignments.copiloto}`, "copiloto");
-
-    // 2. Procura quem perdeu a vaga e rebaixa para tripulante
-    playersList.forEach((p) => {
-      if (p.id !== assignments.copiloto && p.id !== currentPlayer.nickname) {
-        if (localStorage.getItem(`role_${p.id}`) === "copiloto") {
-          localStorage.setItem(`role_${p.id}`, "tripulante");
+    // Promove/despromove cargos no localStorage
+    if (hasCopiloto && assignments.copiloto) {
+      localStorage.setItem(`role_${assignments.copiloto}`, "copiloto");
+      // Rebaixa quem perdeu a vaga de copiloto nesta nave
+      playersList.forEach((p) => {
+        if (p.id !== assignments.copiloto && p.id !== currentPlayer.nickname) {
+          if (localStorage.getItem(`role_${p.id}`) === "copiloto") {
+            localStorage.setItem(`role_${p.id}`, "tripulante");
+          }
         }
-      }
-    });
-    // ----------------------------------------------------------
+      });
+    }
 
-    saveAssignments(assignments);
+    saveAssignments(shipId, assignments);
     onClose();
   };
 
   const getRoleLabel = (playerId) => {
-  if (playerId === currentPlayer.nickname) return "Piloto";
-  if (assignments.copiloto === playerId) return "Co-piloto";
-  const torreta = Object.entries(assignments.torretas).find(([, v]) => v === playerId);
-  if (torreta) return `Torreta ${torreta[0].charAt(0).toUpperCase() + torreta[0].slice(1)}`;
-  return localStorage.getItem(`role_${playerId}`) === "copiloto" ? "Co-piloto" : "Tripulante"; // <- muda só essa linha
+    if (playerId === currentPlayer.nickname) return "Piloto";
+    if (hasCopiloto && assignments.copiloto === playerId) return "Co-piloto";
+    const torretaEntry = Object.entries(assignments.torretas).find(([, v]) => v === playerId);
+    if (torretaEntry) {
+      // Na Vanguard, quem está na torreta central é o co-piloto/artilheiro
+      if (!hasCopiloto && torretaEntry[0] === "centro") return "Co-piloto / Artilheiro";
+      return `Torreta ${torretaEntry[0].charAt(0).toUpperCase() + torretaEntry[0].slice(1)}`;
+    }
+    return "Tripulante";
   };
 
   return (
@@ -140,7 +148,7 @@ const AssignCrew = ({ currentPlayer, currentRole, onClose }) => {
       <div className="assign-modal" onClick={(e) => e.stopPropagation()}>
 
         <div className="assign-header">
-          <h2 className="assign-title">ASSIGN CREW</h2>
+          <h2 className="assign-title">ASSIGN CREW — {shipInfo?.name?.toUpperCase()}</h2>
           <button className="assign-close" onClick={onClose}>×</button>
         </div>
 
@@ -150,18 +158,22 @@ const AssignCrew = ({ currentPlayer, currentRole, onClose }) => {
 
         <div className="assign-body">
 
-          {/* Lista de jogadores */}
+          {/* Lista de jogadores DA MESMA NAVE */}
           <div className="assign-players">
-            {otherPlayers.map((player) => {
+            {crewPlayers.length === 0 && (
+              <p style={{ color: "#888", fontFamily: "'JetBrains Mono', monospace", fontSize: "0.8rem" }}>
+                Nenhum tripulante desta nave está disponível.
+              </p>
+            )}
+
+            {crewPlayers.map((player) => {
               const isOnline = onlineMap[player.id];
-              const isCopiloto = assignments.copiloto === player.id;
+              const isCopiloto = hasCopiloto && assignments.copiloto === player.id;
               const torretaEntry = Object.entries(assignments.torretas).find(([, v]) => v === player.id);
               const torretaAtual = torretaEntry ? torretaEntry[0] : null;
 
               return (
                 <div key={player.id} className={`assign-player-row ${isCopiloto ? "is-copiloto" : ""}`}>
-
-                  {/* Nome + status */}
                   <div className="assign-player-info">
                     <span
                       className="assign-status-dot"
@@ -172,44 +184,43 @@ const AssignCrew = ({ currentPlayer, currentRole, onClose }) => {
                     <span className="assign-player-role">{getRoleLabel(player.id)}</span>
                   </div>
 
-                  {/* --- NOVO: Controles ocultos para não-pilotos --- */}
                   {isPilot && (
                     <div className="assign-player-controls">
-                      {/* Botão co-piloto */}
-                      <button
-                        className={`assign-btn ${isCopiloto ? "active" : ""}`}
-                        onClick={() => handleSetCopiloto(player.id)}
-                        title="Definir como co-piloto"
-                      >
-                        CO-PIL
-                      </button>
 
-                      {/* Torretas */}
-                    {TORRETAS.map((torreta) => {
-                      const ocupado = assignments.torretas[torreta.id];
-                      const isMinha = torretaAtual === torreta.id;
-                      
-                      const isSelfPilot = player.id === currentPlayer.nickname && currentPlayer.role === "piloto";
-  const bloqueado = isCopiloto || isSelfPilot || (!isMinha && ocupado && ocupado !== player.id);
-
-  return (
-    <button
-      key={torreta.id}
-      className={`assign-btn ${isMinha ? "active" : ""} ${bloqueado ? "blocked" : ""}`}
-      onClick={() => handleSetTorreta(player.id, torreta.id)}
-      disabled={!isPilot || bloqueado} // O botão fica desativado nativamente
-                          title={`${torreta.label} — ${torreta.capabilities.join(", ")}`}
+                      {/* Botão co-piloto — só aparece em naves que têm a vaga separada */}
+                      {hasCopiloto && (
+                        <button
+                          className={`assign-btn ${isCopiloto ? "active" : ""}`}
+                          onClick={() => handleSetCopiloto(player.id)}
+                          title="Definir como co-piloto"
                         >
-                          {torreta.id === "esquerda" && "T.ESQ"}
-                          {torreta.id === "centro"   && "T.CTR"}
-                          {torreta.id === "direita"  && "T.DIR"}
+                          CO-PIL
                         </button>
-                      );
-                    })}
+                      )}
+
+                      {/* Torretas da nave */}
+                      {TORRETAS.map((torreta) => {
+                        const ocupado = assignments.torretas[torreta.id];
+                        const isMinha = torretaAtual === torreta.id;
+                        const bloqueado = isCopiloto || (!isMinha && ocupado && ocupado !== player.id);
+
+                        return (
+                          <button
+                            key={torreta.id}
+                            className={`assign-btn ${isMinha ? "active" : ""} ${bloqueado ? "blocked" : ""}`}
+                            onClick={() => handleSetTorreta(player.id, torreta.id)}
+                            disabled={!isPilot || bloqueado}
+                            title={`${torreta.label} — ${torreta.capabilities.join(", ")}`}
+                          >
+                            {torreta.id === "esquerda" && "T.ESQ"}
+                            {torreta.id === "centro"   && (hasCopiloto ? "T.CTR" : "CO-PIL")}
+                            {torreta.id === "direita"  && "T.DIR"}
+                          </button>
+                        );
+                      })}
+
                     </div>
                   )}
-                  {/* ----------------------------------------------- */}
-
                 </div>
               );
             })}
@@ -217,11 +228,24 @@ const AssignCrew = ({ currentPlayer, currentRole, onClose }) => {
 
           {/* Resumo de torretas */}
           <div className="assign-torretas-summary">
+            {/* Vaga de copiloto (só Hawthorne) */}
+            {hasCopiloto && (
+              <div className="assign-torreta-card">
+                <div className="assign-torreta-name">Co-piloto</div>
+                <div className="assign-torreta-caps">Controles · Navegação</div>
+                <div className={`assign-torreta-ocupante ${assignments.copiloto ? "filled" : "empty"}`}>
+                  {assignments.copiloto || "—"}
+                </div>
+              </div>
+            )}
+
             {TORRETAS.map((torreta) => {
               const ocupante = assignments.torretas[torreta.id];
               return (
                 <div key={torreta.id} className="assign-torreta-card">
-                  <div className="assign-torreta-name">{torreta.label}</div>
+                  <div className="assign-torreta-name">
+                    {!hasCopiloto && torreta.id === "centro" ? "Co-piloto / Artilheiro" : torreta.label}
+                  </div>
                   <div className="assign-torreta-caps">{torreta.capabilities.join(" · ")}</div>
                   <div className={`assign-torreta-ocupante ${ocupante ? "filled" : "empty"}`}>
                     {ocupante || "—"}

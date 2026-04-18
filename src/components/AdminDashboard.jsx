@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { playersList } from "../utils/players";
 import { shipsList } from "../data/ships";
 import "../styles/AdminDashboard.css";
-import { getAllShips, updateShipConfig } from "../utils/mockApi";
+import { getAllShips, updateShipConfig, setEnemyShipStatus, clearDestroyedEnemies } from "../utils/mockApi";
 
 const applySorting = (data, config) => {
   const { key, direction } = config;
@@ -68,47 +68,84 @@ const AdminDashboard = ({ onLogout }) => {
     alert(`Especificações da classe ${editForm.name} atualizadas na rede!`);
   };
 
-  const refreshData = () => {
-    // 1. Mapeia os dados brutos como já fazias
+const refreshData = () => {
     const rawMappedData = playersList.map((player) => {
       const isOnline = localStorage.getItem(`status_${player.id}`) === "online";
       const rawRole = localStorage.getItem(`role_${player.id}`);
       const currentRole = (rawRole === "piloto" || rawRole === "copiloto") ? rawRole : "tripulante";
       
-      const savedShipId = localStorage.getItem(`ship_${player.id}`);
-      const currentShipId = savedShipId || "hawthorne_iii"; 
-      const shipLabel = shipsList.find(s => s.id === currentShipId)?.label || "MS Hawthorne III";
+      // Identifica a nave do jogador (padrão Hawthorne se não houver)
+      const savedShipId = localStorage.getItem(`ship_${player.id}`) || "hawthorne_iii"; 
+      const shipLabel = shipsList.find(s => s.id === savedShipId)?.label || "MS Hawthorne III";
       
-      let assignedFunction = currentRole;
+      let assignedFunction = "LIVRE"; // Padrão se não estiver atribuído a nada
+  
       try {
-        const crew = JSON.parse(localStorage.getItem("crew_assignments") || "{}");
-        if (crew.copiloto === player.id) {
-          assignedFunction = "co-piloto";
-        } else {
+        // BUSCA A CHAVE ESPECÍFICA DA NAVE
+        const crewKey = `crew_assignments_${savedShipId}`;
+        const crew = JSON.parse(localStorage.getItem(crewKey) || '{"copiloto": null, "torretas": {}}');
+  
+        // 1. Verifica se é Piloto (pelo cargo base)
+        if (currentRole === "piloto") {
+          assignedFunction = "PILOTO";
+        } 
+        // 2. Verifica se é Co-piloto (atribuição direta na Hawthorne)
+        else if (crew.copiloto === player.id) {
+          assignedFunction = "COPILOTO";
+        } 
+        // 3. Verifica se está em alguma torreta específica
+        else {
           const torretaEntry = Object.entries(crew.torretas || {}).find(([_, uid]) => uid === player.id);
           if (torretaEntry) {
-            assignedFunction = `torreta ${torretaEntry[0]}`;
-          } else if (currentRole === "piloto") {
-            assignedFunction = "piloto";
-          } else {
-            assignedFunction = "tripulante";
+            const [idTorreta] = torretaEntry;
+            // Formata o nome da torreta (ex: "TORRETA CENTRAL")
+            assignedFunction = `TORRETA ${idTorreta.toUpperCase()}`;
           }
         }
-      } catch (e) { assignedFunction = currentRole; }
-
+      } catch (e) { 
+        assignedFunction = currentRole.toUpperCase(); 
+      }
+  
       return {
         ...player,
         online: isOnline,
         role: currentRole,
         ship: shipLabel,
-        function: assignedFunction
+        function: assignedFunction // Agora retorna os nomes corretos solicitados
       };
     });
-
-    // 2. APLICA A ORDENAÇÃO ANTES DE DEFINIR O ESTADO
-    const sortedData = applySorting(rawMappedData, sortConfig);
+  
+    // --- INJEÇÃO DE INIMIGOS ---
+    const dbShips = getAllShips();
+    const enemyCrewMembers = [];
+    
+    Object.values(dbShips).forEach(ship => {
+      if (ship.isEnemy && ship.status === "ativa" && ship.activeCrew) {
+        ship.activeCrew.forEach(member => {
+          enemyCrewMembers.push({
+            id: member.id,
+            label: member.id,
+            des: member.des,
+            esq: member.esq,
+            online: true, 
+            role: member.role,
+            ship: ship.name,
+            function: member.function,
+            isEnemy: true // Marcação usada pro visual
+          });
+        });
+      }
+    });
+  
+    // Combina os jogadores reais com os inimigos gerados
+    const combinedData = [...rawMappedData, ...enemyCrewMembers];
+    
+    // AQUI ESTÁ A CORREÇÃO: Usamos apenas ESTA declaração para o sortedData
+    const sortedData = applySorting(combinedData, sortConfig);
     setUsersData(sortedData);
   };
+
+
 
   // O handleSort agora apenas altera a configuração, o refreshData cuida do resto
   const handleSort = (key) => {
@@ -206,7 +243,7 @@ const AdminDashboard = ({ onLogout }) => {
                   <thead>
                     <tr>
                       <th>STATUS</th>
-                      <th>USUÁRIO</th>
+                      <th>COMANDANTE</th>
                       <th>CARGO ATUAL</th>
                       <th>FUNÇÃO NA NAVE</th>
                       <th>NAVE</th>
@@ -214,21 +251,31 @@ const AdminDashboard = ({ onLogout }) => {
                     </tr>
                   </thead>
                   <tbody>
-                    {usersData.map((user) => (
-                      <tr key={user.id} className={user.online ? "row-online" : "row-offline"}>
-                        <td>
-                          <span className={`status-indicator ${user.online ? "online" : "offline"}`}>
-                            {user.online ? "ONLINE" : "OFFLINE"}
-                          </span>
-                        </td>
-                        <td className="user-name">{user.label}<span style={{ fontSize: '0.7rem', color: '#4a9eff', marginLeft: '10px' }}>
+                      {usersData.map((user) => (
+                        <tr 
+                          key={user.id} 
+                          className={`${user.online ? "row-online" : "row-offline"} ${user.isEnemy ? "hostile-row" : ""}`}
+                        >
+                          <td>
+                            <span className={`status-indicator ${user.online ? "online" : "offline"}`}>
+                              {user.online ? "ONLINE" : "OFFLINE"}
+                            </span>
+                          </td>
+                          <td className="user-name">
+                            {user.label}
+                            <span style={{ fontSize: '0.7rem', color: user.isEnemy ? '#ff4a4a' : '#4a9eff', marginLeft: '10px' }}>
                               (D:{user.des} | E:{user.esq})
-                              </span>
-                         </td>
-                        <td className="user-role">{user.role.toUpperCase()}</td>
-                        <td className="user-func">{user.function.toUpperCase()}</td>
-                        <td className="user-ship">{user.ship}</td>
-                        <td>
+                            </span>
+                          </td>
+                          <td className="user-role">{user.role.toUpperCase()}</td>
+                          {/* AQUI: Adicionamos a classe is-free se for LIVRE e uma classe de hostil se for inimigo */}
+                          <td className={`user-func ${user.function === "LIVRE" ? "is-free" : ""} ${user.isEnemy ? "is-enemy-func" : ""}`}>
+                            {user.function}
+                          </td>
+                          <td className="user-ship" style={{ color: user.isEnemy ? '#ff4a4a' : '' }}>
+                            {user.ship}
+                          </td>
+                          <td>
                           {user.online && (
                             <button 
                               onClick={() => handleForceLogout(user.id)}
@@ -253,7 +300,7 @@ const AdminDashboard = ({ onLogout }) => {
             </>
           )}
 
-          {/* ========================================= */}
+         {/* ========================================= */}
           {/* ABA 02: ENGENHARIA DE FROTA */}
           {/* ========================================= */}
           {activeTab === "fleet" && (
@@ -268,10 +315,25 @@ const AdminDashboard = ({ onLogout }) => {
                       className={`fleet-list-item ${selectedShipId === id ? "selected" : ""}`}
                       onClick={() => handleSelectShip(id)}
                     >
+                      {ship.isEnemy ? `[HOSTIL] ` : `[ALIADA] `}
                       {ship.name.toUpperCase()}
                     </div>
                   ))}
                 </div>
+                
+                {/* BOTÃO DE PURGAR CEMITÉRIO */}
+                <button 
+                  className="fleet-save-btn" 
+                  style={{ marginTop: 'auto', background: 'rgba(255, 50, 50, 0.1)', color: '#ff4a4a', border: '1px solid #ff4a4a' }}
+                  onClick={() => {
+                    clearDestroyedEnemies();
+                    setFleetData(getAllShips());
+                    refreshData();
+                    alert("Cemitério purgado. Nomes liberados para novos esquadrões.");
+                  }}
+                >
+                  PURGAR DESTRUÍDAS
+                </button>
               </div>
 
               <div className="fleet-editor-panel">
@@ -279,6 +341,28 @@ const AdminDashboard = ({ onLogout }) => {
                 
                 {selectedShipId && (
                   <div className="fleet-form">
+                    
+                    {/* SELETOR EXCLUSIVO DE INIMIGOS */}
+                    {fleetData[selectedShipId]?.isEnemy && (
+                      <div className="fleet-form-group">
+                        <label>STATUS DE COMBATE</label>
+                        <select 
+                          className="fleet-input highlight-input"
+                          style={{ color: fleetData[selectedShipId].status === "ativa" ? '#ff4a4a' : '#fff'}}
+                          value={fleetData[selectedShipId].status || "desativada"}
+                          onChange={(e) => {
+                            setEnemyShipStatus(selectedShipId, e.target.value);
+                            setFleetData(getAllShips());
+                            refreshData(); // Atualiza a aba 1 na hora
+                          }}
+                        >
+                          <option value="desativada">DESATIVADA (Oculta)</option>
+                          <option value="ativa">ATIVA (Combate)</option>
+                          <option value="destruida">DESTRUÍDA (Congela Nomes)</option>
+                        </select>
+                      </div>
+                    )}
+
                     <div className="fleet-form-group">
                       <label>ID DE REGISTRO</label>
                       <input type="text" value={selectedShipId} disabled className="fleet-input locked" />
@@ -291,8 +375,10 @@ const AdminDashboard = ({ onLogout }) => {
                         value={editForm.name} 
                         onChange={(e) => setEditForm({...editForm, name: e.target.value})}
                         className="fleet-input" 
+                        disabled={fleetData[selectedShipId]?.isEnemy} // Bloqueia edição do nome de inimigos
                       />
                     </div>
+                    {/* ... (resto do formulário Max HP e Total Points continua igual) ... */}
 
                     <div className="fleet-form-group">
                       <label>INTEGRIDADE ESTRUTURAL (HP)</label>

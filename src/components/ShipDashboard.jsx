@@ -4,17 +4,23 @@ import { calculateRemainingPoints, getEffect } from "../utils/effectHelpers";
 import { shipsDatabase } from "../data/ships";
 import ShipRadarChart from "./ShipRadarChart";
 import AssignCrew from "./AssignCrew";
+import { removePlayerFromAllCrews } from "../utils/mockApi"; // Adicione o import para a função de limpeza de tripulação
+import DexterityRanking from "./Destreza"; // <-- NOVO IMPORT
 import { getShipData, updateShipAttributes } from "../utils/mockApi";
+
 
 
 // Painel principal da nave com interface Starfield
 const ShipDashboard = ({ playerData, onLogout }) => {
-  const [showAssignCrew, setShowAssignCrew] = useState(false);
+
+    const [showAssignCrew, setShowAssignCrew] = useState(false);
+  const [showDexterityModal, setShowDexterityModal] = useState(false);
 
 // --- NOVO: Referências de áudio e do timer ---
-  const rechargeSound = useRef(new Audio('/recharge.mp3'));
-  const powerDownSound = useRef(new Audio('/outage.mp3')); // <- SEU NOVO ÁUDIO
-  const soundTimeout = useRef(null);
+const rechargeSound = useRef(new Audio('/recharge.mp3'));
+const powerDownGeneric = useRef(new Audio('/outage1.mp3')); // Som para reduções normais
+const powerDownOutage = useRef(new Audio('/outage.mp3'));   // Som para quando chega a zero
+const soundTimeout = useRef(null);
 
 
 
@@ -59,61 +65,26 @@ const ShipDashboard = ({ playerData, onLogout }) => {
     }, desiredDurationMs); 
   };
 
-    useEffect(() => {
+   // src/components/ShipDashboard.jsx
+
+useEffect(() => {
     document.body.style.cursor = "url('/normal.cur'), auto";
     localStorage.setItem(`status_${playerData.nickname}`, "online");
     localStorage.setItem(`role_${playerData.nickname}`, playerData.role);
+    localStorage.setItem(`ship_${playerData.nickname}`, playerData.ship);
 
-    if (playerData.role === "piloto") {
-      try {
-        const raw = localStorage.getItem("crew_assignments");
-        if (raw) {
-          const assignments = JSON.parse(raw);
-          let changed = false;
-
-          // Percorre as torretas e remove o piloto se ele estiver lá
-          Object.keys(assignments.torretas).forEach((torretaId) => {
-            if (assignments.torretas[torretaId] === playerData.nickname) {
-              delete assignments.torretas[torretaId];
-              changed = true;
-            }
-          });
-
-          if (changed) {
-            localStorage.setItem("crew_assignments", JSON.stringify(assignments));
-          }
-        }
-      } catch (e) {
-        console.error("Erro ao limpar atribuições do piloto", e);
-      }
-    }
-
-    // --- NOVO: Sincroniza a escolha do Login com as vagas da nave ---
-    try {
-      const raw = localStorage.getItem("crew_assignments");
-      const assignments = raw ? JSON.parse(raw) : { copiloto: null, torretas: {} };
-      let changed = false;
-
-      if (playerData.role === "copiloto") {
-        assignments.copiloto = playerData.nickname;
-        changed = true;
-      } else if (playerData.role === "tripulante" && assignments.copiloto === playerData.nickname) {
-        assignments.copiloto = null; // Se ele logou como tripulante, limpa o cargo anterior
-        changed = true;
-      }
-
-      if (changed) {
-        localStorage.setItem("crew_assignments", JSON.stringify(assignments));
-      }
-    } catch (e) {}
-    // -----------------------------------------------------------------
+    // Garante que ao entrar, ele saia de qualquer configuração antiga de tripulação
+    // que possa ter restado de sessões anteriores
+    removePlayerFromAllCrews(playerData.nickname);
 
     return () => {
-      document.body.style.cursor = "default";
-      localStorage.removeItem(`status_${playerData.nickname}`);
-      localStorage.removeItem(`role_${playerData.nickname}`);
+        document.body.style.cursor = "default";
+        localStorage.removeItem(`status_${playerData.nickname}`);
+        localStorage.removeItem(`role_${playerData.nickname}`);
+        // Opcional: remover também ao deslogar
+        removePlayerFromAllCrews(playerData.nickname);
     };
-  }, [playerData]);
+}, [playerData]);
 
   // Obtém informações da nave do banco de dados
 // 1. Puxa as informações VIVAS da nave do nosso "banco de dados"
@@ -125,26 +96,30 @@ const ShipDashboard = ({ playerData, onLogout }) => {
   // Calcula os pontos restantes para distribuição
   const remainingPoints = calculateRemainingPoints(attributes, shipInfo.totalPoints);
 
-  // --- Função para som de Desligamento / Redução ---
-  const playPowerDownSound = () => {
-    if (!powerDownSound.current) return;
+// --- Função para som de Desligamento / Redução ---
+const playPowerDownSound = (isOutage = false) => {
+  // Escolhe o áudio baseado na condição de "apagão" (zero de energia)
+  const soundToPlay = isOutage ? powerDownOutage.current : powerDownGeneric.current;
 
-    if (soundTimeout.current) {
-      clearTimeout(soundTimeout.current);
-    }
+  if (!soundToPlay) return;
 
-    // Reseta o áudio grave para o início
-    powerDownSound.current.currentTime = 0;
-    powerDownSound.current.volume = 0.4; // Um pouco mais baixo que o de ligar
-    powerDownSound.current.playbackRate = 1.0; 
+  // Limpa timeouts anteriores para não cortar o som novo precocemente
+  if (soundTimeout.current) {
+    clearTimeout(soundTimeout.current);
+  }
 
-    powerDownSound.current.play().catch(e => console.warn("Áudio bloqueado", e));
+  // Reseta e toca
+  soundToPlay.currentTime = 0;
+  soundToPlay.volume = 1.0;
+  soundToPlay.playbackRate = 1.0;
 
-    // Corta o som após um tempo fixo rápido (ex: 400ms)
-    soundTimeout.current = setTimeout(() => {
-      powerDownSound.current.pause();
-    }, 800); 
-  };
+  soundToPlay.play().catch(e => console.warn("Áudio bloqueado", e));
+
+  // Corta o som após um tempo (ajuste conforme a duração dos seus arquivos)
+  soundTimeout.current = setTimeout(() => {
+    soundToPlay.pause();
+  }, isOutage ? 1500 : 500); // O som de outage costuma ser mais longo que o clique genérico
+};
 
 const [currentRole, setCurrentRole] = useState(playerData.role);
 
@@ -270,9 +245,11 @@ const [currentRole, setCurrentRole] = useState(playerData.role);
             }
           }
           else if (difference < 0) {
+            // Verifica se o novo nível será exatamente ZERO
+            const isZero = newLevel <= 0;
             
-            // --- NOVO: Dispara o som de redução! ---
-            playPowerDownSound();
+            // Dispara o som correspondente
+            playPowerDownSound(isZero);
 
             setAttributes({
               ...attributes,
@@ -312,9 +289,20 @@ const [currentRole, setCurrentRole] = useState(playerData.role);
         title="Assign Crew"
         style={{ fontSize: "0.6rem", letterSpacing: "1px", width: "auto", padding: "0 0.75rem" }}
       >
-        RB
+        X
       </button>
     ) : null}
+
+    <span className="logout-text">DESTREZA</span>
+    <button 
+      onClick={() => setShowDexterityModal(true)} 
+      className="logout-button" 
+      title="Ranking Geral"
+      style={{ fontSize: "0.6rem", letterSpacing: "1px", width: "auto", padding: "0 0.75rem" }}
+    >
+      Y
+    </button>
+
     <span className="logout-text">deslogar</span>
     <button onClick={onLogout} className="logout-button" style={{ fontSize: "0.6rem", letterSpacing: "1px", width: "auto", padding: "0 0.75rem" }}
       >
@@ -329,20 +317,20 @@ const [currentRole, setCurrentRole] = useState(playerData.role);
           <section className="attributes-list">
             <h2>Atributos</h2>
             {Object.entries(attributes).map(([name, value]) => (
-              <div key={name} className="attribute-item">
-                <div className="attribute-item-name">
-                  {name === "weapons" && "Armas"}
-                  {name === "missiles" && "Mísseis"}
-                  {name === "controls" && "Controles"}
-                  {name === "shields" && "Escudos"}
-                  {name === "engines" && "Motores"}
-                </div>
-                <div className="attribute-item-value">
-                  <span>[ {value}/6 ]</span>
-                  <span>{getEffect(name, value)}</span>
-                </div>
+            <div className="attribute-item" key={name}>
+              <div className="attribute-item-name">
+                {name === "weapons" && "Armas"}
+                {name === "missiles" && "Mísseis"}
+                {name === "controls" && "Controles"}
+                {name === "shields" && "Escudos"}
+                {name === "engines" && "Motores"}
               </div>
-            ))}
+              <div className="attribute-item-value">
+                <span>[ {value} ]</span>
+                <span>{getEffect(shipInfo.shipClass, name, value)}</span>
+              </div>
+            </div>
+          ))}
           </section>
 
           {/* Central - Painel de Controle da Nave */}
@@ -472,6 +460,11 @@ const [currentRole, setCurrentRole] = useState(playerData.role);
           currentRole={currentRole} // <-- ADICIONE ESTA LINHA
           onClose={() => setShowAssignCrew(false)}
         />
+      )}
+
+      {/* --- ADICIONE ESTAS 3 LINHAS AQUI --- */}
+      {showDexterityModal && (
+        <DexterityRanking onClose={() => setShowDexterityModal(false)} />
       )}
     </div>
   );

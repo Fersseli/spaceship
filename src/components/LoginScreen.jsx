@@ -3,8 +3,14 @@ import "../styles/LoginScreen.css";
 import { rolesList } from "../utils/rolePermissions";
 import { shipsList } from "../data/ships";
 import { playersList } from "../utils/players";
+// O import novo que fizemos para a limpeza:
+import { removePlayerFromAllCrews } from "../utils/mockApi"; 
+
+// Estes dois são componentes que o LoginScreen usa. 
+// Se eles não estiverem a ser importados corretamente, causam esse erro!
 import AdminLogin from "./AdminLogin";
 import AdminDashboard from "./AdminDashboard";
+
 
 const LoginScreen = ({ onLoginSuccess }) => {
   // Estados para o sistema de Admin Oculto
@@ -43,6 +49,8 @@ const LoginScreen = ({ onLoginSuccess }) => {
       }
       return;
     }
+
+    removePlayerFromAllCrews(nickname); // Limpa o jogador de qualquer tripulação antes de logar
 
     // Validação de Co-piloto Único
     if (selectedRole === "copiloto") {
