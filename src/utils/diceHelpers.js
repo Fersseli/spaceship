@@ -2,7 +2,7 @@
 
 const rollDie = (faces) => {
   return Math.floor(Math.random() * faces) + 1;
-  // return 1;
+  //return 1;
 };
 
 
@@ -68,12 +68,20 @@ export const parseShield = (shieldStr) => {
   return isNaN(num) ? 0 : num;
 };
 
-export const rollHit = (precisao) => {
-  const rolou = rollDie(100);
+export const rollHit = (precisao, advantageLevel = 1) => {
+  let rolls = [];
+  for (let i = 0; i < advantageLevel; i++) {
+    rolls.push(rollDie(100)); // Rola o d100 'n' vezes
+  }
+  
+  // Utiliza o menor valor obtido (melhor para d100)
+  const rolou = Math.min(...rolls); 
   const extremo = Math.floor(precisao / 5);
+  
   return { 
     acertou: rolou <= precisao, 
     isExtremo: rolou <= extremo,
-    rolou 
+    rolou,
+    allRolls: rolls
   };
 };

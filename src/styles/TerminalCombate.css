@@ -656,3 +656,29 @@
   75% { opacity: 1; filter: grayscale(1); }
   100% { opacity: 0; transform: scale(0.95); filter: grayscale(1); }
 }
+
+.tc-missile-lock-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+.tc-lock-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.5rem;
+  color: rgba(255, 60, 30, 0.7);
+}
+.tc-lock-box {
+  width: 8px;
+  height: 8px;
+  border: 1px solid rgba(255, 60, 30, 0.5);
+  background: transparent;
+  display: inline-block;
+}
+.tc-lock-box.filled {
+  background: #ff3c1e;
+  box-shadow: 0 0 5px #ff3c1e;
+}
+.tc-lock-box.blink-red {
+  animation: pulse-red 0.5s infinite alternate;
+}

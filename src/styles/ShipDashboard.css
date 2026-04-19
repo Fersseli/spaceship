@@ -91,6 +91,8 @@
   gap: 1rem;
 }
 
+
+
 .logout-text {
   font-size: 0.85rem;
   font-weight: 700;
@@ -520,10 +522,42 @@
   .dashboard-header {
     flex-direction: column;
     gap: 1rem;
-    align-items: flex-start;
+    align-items: center;
     padding: 1.5rem;
+    text-align: center;  /* <-- Adicione isto */
   }
- 
+
+ .logout-button-container {
+    display: grid;
+    /* MÁGICA DO ALINHAMENTO AQUI:
+       Col 1 (Texto Esq) usa o max-content para alinhar pelo maior texto
+       Col 2 (Botão Esq) fixo em 24px
+       Col 3 e 4 repetem o padrão para a direita */
+    grid-template-columns: max-content 24px max-content 24px;
+    gap: 0.6rem 0.5rem; /* Espaço vertical e horizontal */
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+  }
+
+  .logout-text {
+    font-size: 0.55rem; /* Texto ainda menor */
+    letter-spacing: 1px;
+    text-align: right; /* Gruda o texto perfeitamente no botão */
+    margin-right: 0;
+  }
+
+  .logout-button {
+    width: 24px !important;  /* Botão reduzido (era 28px) */
+    height: 24px !important; 
+    font-size: 0.55rem !important; /* Letra do botão reduzida */
+    padding: 0 !important;
+    border-width: 1px !important; /* Borda mais fina para combinar com o tamanho */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
   .player-info-panel  { order: 1; }
   .ship-control-panel { order: 2; }
   .attributes-list    { order: 3; }
@@ -603,6 +637,10 @@
   pointer-events: none;
   z-index: 9999;
 }
+
+.logout-button-container > *:nth-child(4n+3) {
+    margin-left: 5rem; 
+  }
 
 .hit-letter {
   font-family: 'Press Start 2P', cursive;
@@ -691,18 +729,6 @@
   backdrop-filter: blur(5px);
 }
 
-.assign-modal {
-  background: linear-gradient(135deg, rgba(15, 29, 35, 0.98) 0%, rgba(25, 40, 50, 0.95) 100%);
-  border: 2px solid #ff4a4a;
-  box-shadow: 
-    0 0 40px rgba(255, 74, 74, 0.4),
-    inset 0 0 20px rgba(255, 74, 74, 0.1),
-    0 0 60px rgba(255, 74, 74, 0.2);
-  border-radius: 2px;
-  overflow: hidden;
-  backdrop-filter: blur(10px);
-  animation: modalSlideIn 0.4s ease-out;
-}
 
 @keyframes modalSlideIn {
   from {
@@ -779,84 +805,6 @@
   gap: 1.5rem;
 }
 
-/* SELETOR DE ARMA */
-.weapon-selector {
-  display: flex;
-  gap: 10px;
-}
-
-.weapon-selector button {
-  flex: 1;
-  padding: 0.9rem;
-  font-family: 'Orbitron', sans-serif;
-  font-weight: bold;
-  font-size: 0.95rem;
-  text-transform: uppercase;
-  letter-spacing: 2px;
-  background: transparent;
-  color: #ff4a4a;
-  border: 2px solid #ff4a4a;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  position: relative;
-  overflow: hidden;
-}
-
-.weapon-selector button::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: #ff4a4a;
-  z-index: -1;
-  transition: left 0.3s ease;
-}
-
-.weapon-selector button:hover::before {
-  left: 0;
-}
-
-.weapon-selector button:hover {
-  color: #000000;
-  box-shadow: 0 0 20px rgba(255, 74, 74, 0.6);
-}
-
-.weapon-selector button.active {
-  background: #ff4a4a;
-  color: #000000;
-  box-shadow: 
-    0 0 25px rgba(255, 74, 74, 0.8),
-    inset 0 0 10px rgba(0, 0, 0, 0.3);
-}
-
-/* DAMAGE DISPLAY */
-.damage-display {
-  background: linear-gradient(135deg, rgba(255, 74, 74, 0.15) 0%, rgba(255, 74, 74, 0.08) 100%);
-  border: 2px solid #ff4a4a;
-  padding: 1.2rem;
-  color: #ffffff;
-  font-family: 'JetBrains Mono', monospace;
-  text-align: center;
-  font-size: 1.1rem;
-  font-weight: bold;
-  letter-spacing: 2px;
-  position: relative;
-  overflow: hidden;
-}
-
-.damage-display::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, #ff4a4a, transparent);
-  animation: scanline 2s infinite;
-}
-
 @keyframes scanline {
   0% {
     left: -100%;
@@ -917,29 +865,6 @@
   color: #ffffff;
 }
 
-/* CHECKBOX EXTREMO */
-.checkbox-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 1rem;
-  background: rgba(255, 74, 74, 0.08);
-  border: 1px solid rgba(255, 74, 74, 0.3);
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.checkbox-wrapper:hover {
-  background: rgba(255, 74, 74, 0.15);
-  border-color: rgba(255, 74, 74, 0.6);
-}
-
-.checkbox-wrapper input[type="checkbox"] {
-  width: 20px;
-  height: 20px;
-  cursor: pointer;
-  accent-color: #ff4a4a;
-}
 
 .checkbox-label {
   color: #ff4a4a;
@@ -949,61 +874,6 @@
   letter-spacing: 1px;
   font-family: 'Orbitron', sans-serif;
   cursor: pointer;
-}
-
-/* BOTÃO CONFIRMAR */
-.confirm-attack-button {
-  margin-top: 1rem;
-  width: 100%;
-  padding: 1.1rem;
-  background: linear-gradient(135deg, #ff4a4a 0%, #ff6b6b 100%);
-  color: #000000;
-  border: 2px solid #ff4a4a;
-  font-family: 'Orbitron', sans-serif;
-  font-weight: bold;
-  font-size: 1rem;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  position: relative;
-  overflow: hidden;
-  box-shadow: 0 0 20px rgba(255, 74, 74, 0.4);
-}
-
-.confirm-attack-button::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: rgba(255, 255, 255, 0.2);
-  transition: left 0.3s ease;
-  z-index: -1;
-}
-
-.confirm-attack-button:hover:not(:disabled)::before {
-  left: 100%;
-}
-
-.confirm-attack-button:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 
-    0 0 30px rgba(255, 74, 74, 0.8),
-    0 5px 15px rgba(255, 74, 74, 0.3);
-}
-
-.confirm-attack-button:active:not(:disabled) {
-  transform: translateY(0);
-}
-
-.confirm-attack-button:disabled {
-  background: linear-gradient(135deg, rgba(51, 51, 51, 0.8) 0%, rgba(40, 40, 40, 0.8) 100%);
-  color: #666666;
-  border-color: #555555;
-  cursor: not-allowed;
-  box-shadow: none;
 }
 
 /* Estilo para dano causado pelo jogador (Azul) */
@@ -1143,64 +1013,772 @@
   animation: moduleMsgFadeInOut 5s ease-in-out forwards;
   box-shadow: 0 0 20px rgba(255, 174, 0, 0.5);
 }
+/* ========================================= */
+/* OVERLAY DA MIRA INIMIGA — NOVO            */
+/* ========================================= */
 
-/* ========================================= */
-/* OVERLAY DA MIRA INIMIGA                   */
-/* ========================================= */
 .missile-lock-overlay {
   position: fixed;
   inset: 0;
-  pointer-events: none; /* Para não bloquear cliques */
-  z-index: 9998; /* Fica logo atrás do dano */
+  pointer-events: none;
+  z-index: 9998;
   display: flex;
   justify-content: center;
   align-items: center;
-  background: radial-gradient(circle, transparent 50%, rgba(255, 0, 0, 0.15) 100%);
-  animation: pulse-red-bg 2s infinite alternate;
+  animation: vignette-pulse 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes vignette-pulse {
+  from { box-shadow: inset 0 0 80px 30px rgba(255, 30, 10, 0.18); }
+  to   { box-shadow: inset 0 0 120px 50px rgba(255, 30, 10, 0.42); }
+}
+
+/* Scanline percorrendo a tela */
+.missile-lock-overlay::before {
+  content: '';
+  position: absolute;
+  left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 60, 30, 0.45), transparent);
+  animation: ml-scan 3s linear infinite;
+}
+
+@keyframes ml-scan {
+  0%   { top: 0%;   opacity: 0; }
+  5%   { opacity: 1; }
+  95%  { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+/* Container central */
+.crosshair-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  position: relative;
+}
+
+/* Cantos HUD ao redor da mira */
+.crosshair-container::before,
+.crosshair-container::after {
+  display: none; /* usamos pseudo-elementos nos cantos via SVG inline */
+}
+
+/* Mira principal — camada externa girando */
+.crosshair-symbol {
+  position: relative;
+  width: 200px;
+  height: 200px;
+  font-size: unset; /* remove o font-size enorme do antigo */
+}
+
+/* SVG da mira — injetado via JSX */
+.ml-ring-outer {
+  position: absolute;
+  inset: 0;
+  animation: ml-rotate 14s linear infinite;
+}
+
+.ml-ring-inner {
+  position: absolute;
+  inset: 0;
+  animation: ml-rotate 5s linear infinite reverse;
+}
+
+@keyframes ml-rotate {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* Ponto central pulsante */
+.ml-dot {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 10px; height: 10px;
+  background: #ff3c1e;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 14px 5px rgba(255, 60, 30, 0.8);
+  animation: ml-dot-pulse 0.55s ease-in-out infinite alternate;
+}
+
+@keyframes ml-dot-pulse {
+  from { transform: translate(-50%, -50%) scale(0.7); opacity: 0.6; }
+  to   { transform: translate(-50%, -50%) scale(1.5); opacity: 1; }
+}
+
+/* Cantos do frame HUD */
+.ml-corner {
+  position: absolute;
+  width: 20px; height: 20px;
+  border-style: solid;
+  border-color: rgba(255, 60, 30, 0.8);
+  animation: ml-corner-blink 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes ml-corner-blink {
+  from { border-color: rgba(255, 60, 30, 0.3); }
+  to   { border-color: #ff6040; }
+}
+
+.ml-corner.tl { top: -8px; left: -8px; border-width: 2px 0 0 2px; }
+.ml-corner.tr { top: -8px; right: -8px; border-width: 2px 2px 0 0; }
+.ml-corner.bl { bottom: -8px; left: -8px; border-width: 0 0 2px 2px; }
+.ml-corner.br { bottom: -8px; right: -8px; border-width: 0 2px 2px 0; }
+
+/* Textos */
+.crosshair-text {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  letter-spacing: 5px;
+  text-transform: uppercase;
+  color: #ff3c1e;
+  text-shadow: 0 0 10px rgba(255, 60, 30, 0.8);
+  animation: blink-text 0.8s step-end infinite;
+}
+
+.ml-sublabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.55rem;
+  letter-spacing: 3px;
+  color: rgba(255, 60, 30, 0.45);
+  text-transform: uppercase;
+  margin-top: -12px;
+}
+
+@keyframes blink-text {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.1; }
+}
+
+/* Remove as animações antigas que não são mais usadas */
+/* pulse-red-bg, lock-scale — podem ser deletadas */
+
+/* =============================================
+   ATTACK MODAL — NOVO DESIGN
+   Adicione ao final de ShipDashboard.css
+   ============================================= */
+
+.attack-modal {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  background: #07090c;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 3px solid #ff3c1e;
+  font-family: 'Orbitron', sans-serif;
+  overflow: hidden;
+  animation: modalSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Cantos HUD */
+.attack-modal__corner {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-style: solid;
+  border-color: rgba(255, 60, 30, 0.6);
+  pointer-events: none;
+  z-index: 10;
+}
+.attack-modal__corner--tl { top: 0;    left: 0;   border-width: 1px 0 0 1px; }
+.attack-modal__corner--tr { top: 0;    right: 0;  border-width: 1px 1px 0 0; }
+.attack-modal__corner--bl { bottom: 0; left: 0;   border-width: 0 0 1px 1px; }
+.attack-modal__corner--br { bottom: 0; right: 0;  border-width: 0 1px 1px 0; }
+
+/* Scanline */
+.attack-modal__scanline {
+  position: absolute;
+  left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 60, 30, 0.4), transparent);
+  animation: attack-scan 5s linear infinite;
+  pointer-events: none;
+  z-index: 5;
+}
+
+@keyframes attack-scan {
+  0%   { top: 0%;   opacity: 0; }
+  5%   { opacity: 1; }
+  95%  { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+/* ── HEADER ── */
+.attack-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid rgba(255, 60, 30, 0.15);
+  background: rgba(255, 30, 10, 0.04);
+}
+
+.attack-modal__header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.attack-modal__alert-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ff3c1e;
+  box-shadow: 0 0 10px rgba(255, 60, 30, 0.9);
+  flex-shrink: 0;
+  animation: am-dot-pulse 1s ease-in-out infinite alternate;
+}
+
+@keyframes am-dot-pulse {
+  from { opacity: 0.5; transform: scale(0.8); }
+  to   { opacity: 1;   transform: scale(1.2); }
+}
+
+.attack-modal__eyebrow {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.55rem;
+  color: rgba(255, 80, 40, 0.5);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+.attack-modal__title {
+  font-size: 1rem;
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin: 0;
+  line-height: 1;
+}
+
+.attack-modal__close {
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 1px solid rgba(255, 60, 30, 0.3);
+  color: rgba(255, 60, 30, 0.6);
+  font-size: 1.2rem;
+  font-weight: 300;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  font-family: sans-serif;
+  line-height: 1;
+}
+
+.attack-modal__close:hover {
+  background: #ff3c1e;
+  border-color: #ff3c1e;
+  color: #000;
+}
+
+/* ── SELETOR DE ARMA ── */
+.attack-modal__weapon-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.attack-modal__weapon-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 0.9rem 1.25rem;
+  background: transparent;
+  border: none;
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: left;
+  position: relative;
+  overflow: hidden;
+}
+
+.attack-modal__weapon-btn:last-child { border-right: none; }
+
+.attack-modal__weapon-btn::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 2px;
+  background: #ff3c1e;
+  transform: scaleX(0);
+  transition: transform 0.2s;
+}
+
+.attack-modal__weapon-btn.active::after { transform: scaleX(1); }
+
+.attack-modal__weapon-btn.active {
+  background: rgba(255, 60, 30, 0.07);
+}
+
+.attack-modal__weapon-btn.cooldown {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.attack-modal__weapon-icon {
+  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.2);
+  transition: color 0.2s;
+}
+.attack-modal__weapon-btn.active .attack-modal__weapon-icon { color: #ff3c1e; }
+
+.attack-modal__weapon-label {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.4);
+  transition: color 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.attack-modal__weapon-btn.active .attack-modal__weapon-label { color: #ffffff; }
+
+.attack-modal__cooldown-badge {
+  font-size: 0.55rem;
+  background: rgba(255, 174, 0, 0.15);
+  border: 1px solid rgba(255, 174, 0, 0.4);
+  color: #ffae00;
+  padding: 1px 5px;
+  letter-spacing: 1px;
+}
+
+.attack-modal__weapon-dmg {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.25);
+  transition: color 0.2s;
+}
+.attack-modal__weapon-btn.active .attack-modal__weapon-dmg { color: #ff5028; }
+
+/* ── BODY ── */
+.attack-modal__body {
+  padding: 1.25rem 1.25rem 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+.attack-modal__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.attack-modal__field-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.62rem;
+  color: rgba(255, 255, 255, 0.35);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.attack-modal__field-num {
+  font-size: 0.55rem;
+  color: #ff3c1e;
+  opacity: 0.7;
+  font-weight: 700;
+}
+
+.attack-modal__select,
+.attack-modal__input {
+  width: 100%;
+  padding: 0.7rem 0.9rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 2px solid rgba(255, 60, 30, 0.3);
+  color: #ffffff;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  letter-spacing: 1px;
+  transition: all 0.2s;
+  outline: none;
+}
+
+.attack-modal__select:focus,
+.attack-modal__input:focus {
+  border-color: rgba(255, 60, 30, 0.6);
+  background: rgba(255, 60, 30, 0.04);
+}
+
+.attack-modal__select option {
+  background: #0a0f14;
+  color: #fff;
+}
+
+/* Info do alvo */
+.attack-modal__target-info {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  margin-top: 2px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.attack-modal__target-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.5rem 0.4rem;
+  gap: 3px;
+}
+
+.attack-modal__target-key {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.5rem;
+  color: rgba(255, 255, 255, 0.25);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.attack-modal__target-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* Toggle Extremo */
+.attack-modal__extremo-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  padding: 0.6rem 0.9rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: all 0.2s;
+  user-select: none;
+}
+
+.attack-modal__extremo-toggle:hover {
+  background: rgba(255, 60, 30, 0.05);
+  border-color: rgba(255, 60, 30, 0.2);
+}
+
+.attack-modal__extremo-track {
+  width: 36px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 0;
+  position: relative;
+  flex-shrink: 0;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.attack-modal__extremo-track.active {
+  background: rgba(255, 60, 30, 0.2);
+  border-color: #ff3c1e;
+}
+
+.attack-modal__extremo-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  background: rgba(255, 255, 255, 0.3);
+  transition: all 0.2s;
+}
+
+.attack-modal__extremo-track.active .attack-modal__extremo-thumb {
+  left: 20px;
+  background: #ff3c1e;
+  box-shadow: 0 0 8px rgba(255, 60, 30, 0.8);
+}
+
+.attack-modal__extremo-name {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.6);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+.attack-modal__extremo-sub {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.55rem;
+  color: rgba(255, 255, 255, 0.25);
+  letter-spacing: 0.5px;
+}
+
+/* Preview de dano */
+.attack-modal__damage-preview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 0.9rem;
+  background: rgba(255, 60, 30, 0.05);
+  border: 1px solid rgba(255, 60, 30, 0.15);
+  border-left: 2px solid #ff3c1e;
+}
+
+.attack-modal__damage-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.58rem;
+  color: rgba(255, 255, 255, 0.3);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.attack-modal__damage-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #ff5028;
+  letter-spacing: 1px;
+  text-shadow: 0 0 12px rgba(255, 80, 40, 0.6);
+}
+
+/* ── FOOTER ── */
+.attack-modal__footer {
+  padding: 1rem 1.25rem 1.25rem;
+}
+
+.attack-modal__fire-btn {
+  width: 100%;
+  padding: 0.9rem 1.5rem;
+  background: rgba(255, 60, 30, 0.1);
+  border: 1px solid rgba(255, 60, 30, 0.4);
+  color: #ff5028;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+
+.attack-modal__fire-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 60, 30, 0.1), transparent);
+  transform: translateX(-100%);
+  transition: transform 0.4s;
+}
+
+.attack-modal__fire-btn:hover:not(:disabled)::before {
+  transform: translateX(100%);
+}
+
+.attack-modal__fire-btn:hover:not(:disabled) {
+  background: #ff3c1e;
+  color: #000;
+  border-color: #ff3c1e;
+  box-shadow: 0 0 25px rgba(255, 60, 30, 0.5);
+}
+
+.attack-modal__fire-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  color: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.08);
+  background: transparent;
+}
+
+/* =============================================
+   MISSILE LOCK — NOVO DESIGN
+   ============================================= */
+
+.missile-lock-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9998;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  animation: vignette-pulse 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes vignette-pulse {
+  from { box-shadow: inset 0 0 80px 30px rgba(255, 30, 10, 0.18); }
+  to   { box-shadow: inset 0 0 120px 50px rgba(255, 30, 10, 0.42); }
+}
+
+.missile-lock-overlay::before {
+  content: '';
+  position: absolute;
+  left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 60, 30, 0.45), transparent);
+  animation: ml-scan 3s linear infinite;
+}
+
+@keyframes ml-scan {
+  0%   { top: 0%;   opacity: 0; }
+  5%   { opacity: 1; }
+  95%  { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
 }
 
 .crosshair-container {
   display: flex;
   flex-direction: column;
   align-items: center;
-  color: #ff3c1e;
-  text-shadow: 0 0 15px rgba(255, 60, 30, 0.8);
-}
-
-.crosshair-text {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 1.5rem;
-  font-weight: bold;
-  letter-spacing: 5px;
-  margin-bottom: 1rem;
-  animation: blink-text 1s infinite;
+  gap: 18px;
+  position: relative;
 }
 
 .crosshair-symbol {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 8rem;
-  font-weight: 900;
-  animation: lock-scale 1s infinite alternate;
+  position: relative;
+  width: 200px;
+  height: 200px;
 }
 
-@keyframes pulse-red-bg {
-  0% { background: radial-gradient(circle, transparent 50%, rgba(255, 0, 0, 0.1) 100%); }
-  100% { background: radial-gradient(circle, transparent 40%, rgba(255, 0, 0, 0.3) 100%); }
+.ml-ring-outer {
+  position: absolute;
+  inset: 0;
+  animation: ml-rotate 14s linear infinite;
+}
+
+.ml-ring-inner {
+  position: absolute;
+  inset: 0;
+  animation: ml-rotate 5s linear infinite reverse;
+}
+
+@keyframes ml-rotate {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.ml-dot {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 10px; height: 10px;
+  background: #ff3c1e;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 14px 5px rgba(255, 60, 30, 0.8);
+  animation: ml-dot-pulse 0.55s ease-in-out infinite alternate;
+}
+
+@keyframes ml-dot-pulse {
+  from { transform: translate(-50%, -50%) scale(0.7); opacity: 0.6; }
+  to   { transform: translate(-50%, -50%) scale(1.5); opacity: 1; }
+}
+
+.ml-corner {
+  position: absolute;
+  width: 20px; height: 20px;
+  border-style: solid;
+  border-color: rgba(255, 60, 30, 0.8);
+  animation: ml-corner-blink 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes ml-corner-blink {
+  from { border-color: rgba(255, 60, 30, 0.3); }
+  to   { border-color: #ff6040; }
+}
+
+.ml-corner.tl { top: -8px; left: -8px;   border-width: 2px 0 0 2px; }
+.ml-corner.tr { top: -8px; right: -8px;  border-width: 2px 2px 0 0; }
+.ml-corner.bl { bottom: -8px; left: -8px;  border-width: 0 0 2px 2px; }
+.ml-corner.br { bottom: -8px; right: -8px; border-width: 0 2px 2px 0; }
+
+.crosshair-text {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  letter-spacing: 5px;
+  text-transform: uppercase;
+  color: #ff3c1e;
+  text-shadow: 0 0 10px rgba(255, 60, 30, 0.8);
+  animation: blink-text 0.8s step-end infinite;
+}
+
+.ml-sublabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.55rem;
+  letter-spacing: 3px;
+  color: rgba(255, 60, 30, 0.45);
+  text-transform: uppercase;
+  margin-top: -12px;
 }
 
 @keyframes blink-text {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
+  50%       { opacity: 0.1; }
 }
 
-@keyframes lock-scale {
-  from { transform: scale(0.95); opacity: 0.8; }
-  to { transform: scale(1.05); opacity: 1; }
+.attack-modal__lock-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.55rem;
+  color: rgba(255, 255, 255, 0.4);
+}
+.am-lock-box {
+  width: 10px;
+  height: 10px;
+  border: 1px solid rgba(255, 60, 30, 0.5);
+}
+.am-lock-box.filled {
+  background: #ff3c1e;
+  box-shadow: 0 0 5px #ff3c1e;
+}
+.am-lock-box.blink-red {
+  animation: pulse-red 0.5s infinite alternate;
+}
+.attack-modal__advantage-alert {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.65rem;
+  font-weight: bold;
+  color: #2aff8c;
+  background: rgba(42, 255, 140, 0.1);
+  border: 1px solid #2aff8c;
+  padding: 0.5rem;
+  text-align: center;
+  margin-top: 0.5rem;
+  letter-spacing: 1px;
 }
 
-.disabled-cooldown {
-  opacity: 0.5;
+.control-bar.blocked {
+  background: rgba(255, 60, 30, 0.1);
+  border: 1px solid rgba(255, 60, 30, 0.4);
   cursor: not-allowed;
-  border-color: #555 !important;
-  color: #888 !important;
+  position: relative;
+  overflow: hidden;
+}
+/* Linha diagonal vermelha de sistema perdido */
+.control-bar.blocked::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -20%;
+  width: 140%;
+  height: 1px;
+  background: rgba(255, 60, 30, 0.8);
+  transform: rotate(15deg);
 }

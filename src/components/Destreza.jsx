@@ -5,9 +5,7 @@ import { getAllShips } from "../utils/mockApi";
 import "../styles/Destreza.css";
 
 const DexterityRanking = ({ onClose }) => {
-  // useMemo garante que a lista só é calculada quando o modal abre
   const rankedPlayers = useMemo(() => {
-    // 1. Mapeia os jogadores normais
     const rawMappedData = playersList.map((player) => {
       const rawRole = localStorage.getItem(`role_${player.id}`);
       const currentRole = (rawRole === "piloto" || rawRole === "copiloto") ? rawRole : "tripulante";
@@ -44,7 +42,6 @@ const DexterityRanking = ({ onClose }) => {
       };
     });
 
-    // 2. Mapeia os inimigos ATIVOS
     const dbShips = getAllShips();
     const enemyCrewMembers = [];
     Object.values(dbShips).forEach(ship => {
@@ -63,7 +60,6 @@ const DexterityRanking = ({ onClose }) => {
       }
     });
 
-    // 3. Combina e Ordena (Prioridade: DES > ESQ)
     const combinedData = [...rawMappedData, ...enemyCrewMembers];
     combinedData.sort((a, b) => {
       if (b.des !== a.des) return b.des - a.des;
@@ -77,21 +73,29 @@ const DexterityRanking = ({ onClose }) => {
     <div className="dex-overlay" onClick={onClose}>
       <div className="dex-modal" onClick={(e) => e.stopPropagation()}>
         <div className="dex-header">
-          <h2 className="dex-title">ORDEM DE DESTREZA</h2>
-          <button className="dex-close" onClick={onClose}>×</button>
+          <div>
+            <div className="dex-eyebrow">HEAVEN'S DOOR // TACTICAL ANALYSIS</div>
+            <h2 className="dex-title">ORDEM DE DESTREZA</h2>
+          </div>
+          <button className="dex-close" onClick={onClose}>✕</button>
         </div>
         
         <div className="dex-body">
           {rankedPlayers.map((p, index) => (
-            <div key={`${p.id}-${index}`} className={`dex-card ${p.isEnemy ? 'enemy' : ''}`}>
+            <div key={`${p.id}-${index}`} className={`dex-card ${p.isEnemy ? 'enemy' : 'ally'}`}>
               <div className="dex-row-top">
                 <span className="dex-name">
-                {index + 1}. <span className="dex-cmdt">CMDT</span>. {p.label}
+                  <span className="dex-index">{String(index + 1).padStart(2, '0')}.</span> 
+                  <span className="dex-cmdt">CMDT.</span> {p.label}
                 </span>
-                <span className="dex-stats">(D:{p.des} | E:{p.esq})</span>
+                <span className="dex-stats">
+                  <span className="dex-stat-lbl">D:</span>{p.des} <span className="dex-stat-lbl">E:</span>{p.esq}
+                </span>
               </div>
               <div className="dex-row-bottom">
-                {p.ship} — {p.function}
+                <span className="dex-ship">{p.ship}</span>
+                <span className="dex-separator">//</span>
+                <span className="dex-func">{p.function}</span>
               </div>
             </div>
           ))}

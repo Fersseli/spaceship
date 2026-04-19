@@ -46,6 +46,50 @@ export const getAllShips = () => {
   initDB();
   return JSON.parse(localStorage.getItem(DB_KEY));
 };
+// --- NOVAS FUNÇÕES: LIMITES DE ENERGIA POR AVARIA ---
+export const getShipMaxAttributes = (ship) => {
+  const maxAttrs = { weapons: 6, missiles: 6, controls: 6, shields: 6, engines: 6 };
+  if (!ship || !ship.activeCrew) return maxAttrs;
+
+  if (ship.shipClass === "type_III") {
+    // CLASSE 3
+    const left = ship.activeCrew.find(m => m.function && m.function.includes("ESQUERDA"));
+    const right = ship.activeCrew.find(m => m.function && m.function.includes("DIREITA"));
+    const center = ship.activeCrew.find(m => m.function && m.function.includes("CENTRO"));
+
+    let sideDownCount = 0;
+    if (left && left.moduleStatus !== 'operacional') sideDownCount++;
+    if (right && right.moduleStatus !== 'operacional') sideDownCount++;
+
+    if (sideDownCount === 1) maxAttrs.weapons = 3; // 1 torreta avariada = Máximo 3
+    if (sideDownCount === 2) maxAttrs.weapons = 0; // 2 torretas avariadas = Máximo 0
+
+    if (center && center.moduleStatus !== 'operacional') maxAttrs.missiles = 0; // Míssil avariado = Máximo 0
+  } else if (ship.shipClass === "type_II") {
+    // CLASSE 2 (Copiloto nos NPCs, ou Torreta Central nos Jogadores)
+    const copilot = ship.activeCrew.find(m => m.function && (m.function.includes("COPILOTO") || m.function.includes("CENTRO")));
+    if (copilot) {
+      if (copilot.moduleStatus === 'avariada') maxAttrs.weapons = 2; // Bloqueia 4 pontos (6-4 = max 2)
+      if (copilot.moduleStatus === 'destruida') maxAttrs.weapons = 0; // Bloqueia tudo (max 0)
+    }
+  }
+  return maxAttrs;
+};
+
+export const enforceAttributeLimits = (ship) => {
+  if (!ship || !ship.attributes) return false;
+  let changed = false;
+  const maxAttrs = getShipMaxAttributes(ship);
+  
+  Object.keys(ship.attributes).forEach(attr => {
+    if (ship.attributes[attr] > maxAttrs[attr]) {
+      // "Cospe" os pontos de volta ao forçar o atributo a baixar para o novo limite
+      ship.attributes[attr] = maxAttrs[attr]; 
+      changed = true;
+    }
+  });
+  return changed;
+};
 
   // No src/utils/mockApi.js, adicione esta lógica para inicializar a tripulação se ela não existir
 export const getShipData = (shipId) => {
@@ -122,7 +166,7 @@ export const enemyNamesPool = [...new Set([
   "Solo", "Calrissian", "Maverick", "Goose", "Senna", "Verstappo", "Alonso", "Cruise", "Torreto", "Pitt", "Fujiwara", "McQueen", "Gosling", "Drive", "Sega", "Skywalker", "Ligthyear", "Nemo", "Kaneda", "Tetsuo", "West", "O'conner", "Grace", "Mountain", "Hudson", "Dusty", "Quill", "Jones", "Reeve", "Stilgar", "Dameron", "Deckard", "Flint", "Ayanami", "Ikari", "Asuka", "Boss", "Snake", "Chief", "Hamiltton", "Kojima", "Walker", "Idaho", "Atreides", "Scytale", "Leto", "Harah", "Kenobi", "Hutt", "Alves", "Welles", "Ashura", "Mahat", "Zepelli", "Joestar", "Akbar", "Shitto", "Hirose", "Madera", "Edge", "Iceman", "Caveman", "Murderkill", "Harkonnen", "Feyd-Rautha", "Rabban", "Corrino", "Liet-Kynes", "Sardaukar", "Shadout", "Assad", "Bashar", "Gesserit", "Nate", "Megaton", "Chance", "Tano", "Destroyer", "Momoa", "Armas", "Rossi", "Telles", "Cody", "Moff", "Fett", "Tarantino", "Kubrick", "Windu", "Amidala", "Antilles", "Rorschach", "Mata", "Maniac", "Russo", "Mohammed", "Abdul", "Kakyoin", "Matte", "Croft", "Hannibal", "Krueger", "Xenomorph", "Samara", "Khan", "Harvey", "Fring", "Black", "Montana", "Punisher", "Terminator", "Ted", "Wayne", "Berkowitz", "Brudos", "Doe", "Rapid", "Strangler", "DeAngelo", "Nightstalker", "Zedong", "Saddam", "Franco", "Maduro", "Mugabe", "Barack", "Capone", "Haunter", "Mirror", "Raven", "Mortis", "Graves", "Banshee", "Voss", "Wraith"
 ])];
 
-const rndPrecisao = () => Math.floor(Math.random() * (70 - 30 + 1)) + 30;
+const rndPrecisao = () => Math.floor(Math.random() * (70 - 40 + 1)) + 40;
 
 export const setEnemyShipStatus = (shipId, newStatus) => {
   const ships = getAllShips();
@@ -191,6 +235,7 @@ export const applyModuleDamage = (shipId, memberId) => {
     return "Módulo já está destruído";
   }
   
+  enforceAttributeLimits(ship); // NOVO
   localStorage.setItem(DB_KEY, JSON.stringify(ships));
   return statusMsg;
 };
@@ -230,13 +275,14 @@ export const processGlobalTurn = () => {
         }
       });
     }
+    enforceAttributeLimits(ship); // NOVO: Garante destravamento ao reparar pelo tempo
   });
 
   localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
   return relatorio;
 };
 
-export const processPlayerAttack = (attackerShipId, targetShipId, inputDamage, isExtremo, weaponEffect) => {
+export const processPlayerAttack = (attackerShipId, targetShipId, inputDamage, isExtremo, weaponEffect, isMissile = false) => {
   const ships = getAllShips();
   const attacker = ships[attackerShipId];
   const target = ships[targetShipId];
@@ -257,7 +303,6 @@ export const processPlayerAttack = (attackerShipId, targetShipId, inputDamage, i
   // 3. Aplicar Dano
   target.currentHP = Math.max(0, (target.currentHP ?? target.maxHP) - finalDamage);
 
-  // 4. Avaria de Módulo (Crítico/Extremo)
   // 4. Avaria de Módulo (Crítico/Extremo)
   let moduleLog = "";
   // Só causa avaria se o dano ultrapassou o escudo (finalDamage > 0)
@@ -285,9 +330,24 @@ export const processPlayerAttack = (attackerShipId, targetShipId, inputDamage, i
       }
     }
   }
+  enforceAttributeLimits(target); // NOVO: Causa o bloqueio se o tiro do player avariou algo!
 
-  if (weaponEffect.toLowerCase().includes("míssil")) {
-    attacker.missileCooldown = 2; 
+ // Dentro de processPlayerAttack, localize o if (weaponEffect.toLowerCase().includes("míssil")) e substitua por:
+
+ // Dentro de processPlayerAttack no mockApi.js:
+  if (isMissile) {
+    attacker.missileCooldown = 2;
+    if (attacker.activeCrew) {
+      attacker.activeCrew.forEach(m => {
+        if (m.missileTarget || m.missileLockLevel > 0) { 
+          m.missileLockLevel = 0; // Zera o visual
+          m.missileTarget = null; // Zera o alvo
+          m.missileReady = false; // Bloqueia o botão de atirar
+        }
+      });
+    }
+    // SALVA TUDO NO LOCALSTORAGE
+    localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
   }
 
   // 4. Avaria de Módulo (Crítico/Extremo)
@@ -378,10 +438,48 @@ export const repairAllShipsGlobal = () => {
         }
       });
     }
+    enforceAttributeLimits(ship); // NOVO: Destrava após reparo mágico
   });
 
   if (changed) {
     localStorage.setItem(DB_KEY, JSON.stringify(ships)); //
   }
   return changed;
+};
+
+// No final do arquivo mockApi.js, substitua a função incrementMissileLock inteira por esta:
+
+export const incrementMissileLock = (shipId) => {
+  const ships = getAllShips();
+  const ship = ships[shipId];
+  let alerts = [];
+  let changed = false;
+
+  if (ship && ship.activeCrew) {
+    ship.activeCrew.forEach(member => {
+      let hasMissile = false;
+      if (ship.crew && ship.crew.torretas) {
+        const torreta = ship.crew.torretas.find(t => member.function && member.function.includes(t.id.toUpperCase()));
+        if (torreta && torreta.capabilities.includes("Míssil")) {
+          hasMissile = true;
+        }
+      }
+
+      // REGRA 1: Só incrementa se a nave tiver míssil E O TRIPULANTE TIVER UM ALVO TRAVADO
+      if (hasMissile && member.missileTarget) {
+        if (member.missileLockLevel === undefined) member.missileLockLevel = 0;
+        
+        if (member.missileLockLevel < 3) {
+          member.missileLockLevel += 1;
+          changed = true;
+        }
+        
+        if (member.missileLockLevel === 3) {
+          alerts.push(`ALERTA TÁTICO: O Míssil da ${ship.name} - ${member.function} atingiu trava máxima e deve ser lançado imediatamente!`);
+        }
+      }
+    });
+    if (changed) localStorage.setItem(DB_KEY, JSON.stringify(ships));
+  }
+  return alerts;
 };

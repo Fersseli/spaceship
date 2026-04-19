@@ -1,4 +1,4 @@
-/* Overlay escuro por cima do dashboard */
+/* Overlay escuro e blur tático */
 .assign-overlay {
   position: fixed;
   inset: 0;
@@ -7,30 +7,102 @@
   align-items: center;
   justify-content: center;
   z-index: 100;
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(5px);
+  animation: modalSlideIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Modal */
+@keyframes modalSlideIn {
+  from { opacity: 0; transform: translateY(-15px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Modal Estilo HUD Azul/Aliado */
 .assign-modal {
-  background: linear-gradient(135deg, rgba(15, 29, 35, 0.98) 0%, rgba(25, 40, 50, 0.95) 100%);
-  border: 2px solid #d0d0d0;
-  border-radius: 2px;
+  position: relative;
+  background: #07090c;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 3px solid #4a9eff;
   width: 100%;
   max-width: 680px;
   max-height: 85vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 0 40px rgba(200, 200, 200, 0.15);
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.5);
   font-family: 'Orbitron', sans-serif;
+  overflow: hidden;
 }
+
+/* Linha de scan */
+.assign-scanline {
+  position: absolute;
+  left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(74, 158, 255, 0.3), transparent);
+  animation: assign-scan 4s linear infinite;
+  pointer-events: none;
+  z-index: 5;
+}
+
+@keyframes assign-scan {
+  0% { top: 0%; opacity: 0; }
+  5% { opacity: 1; }
+  95% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+/* Cantos HUD */
+.assign-corner {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-style: solid;
+  border-color: rgba(74, 158, 255, 0.5);
+  pointer-events: none;
+  z-index: 10;
+}
+.assign-corner--tl { top: 0; left: 0; border-width: 1px 0 0 1px; }
+.assign-corner--tr { top: 0; right: 0; border-width: 1px 1px 0 0; }
+.assign-corner--bl { bottom: 0; left: 0; border-width: 0 0 1px 1px; }
+.assign-corner--br { bottom: 0; right: 0; border-width: 0 1px 1px 0; }
 
 /* Header do modal */
 .assign-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1.5rem 2rem;
-  border-bottom: 2px solid #d0d0d0;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid rgba(74, 158, 255, 0.2);
+  background: rgba(74, 158, 255, 0.04);
+}
+
+.assign-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.assign-alert-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4a9eff;
+  box-shadow: 0 0 10px rgba(74, 158, 255, 0.9);
+  flex-shrink: 0;
+  animation: assign-dot-pulse 1.5s ease-in-out infinite alternate;
+}
+
+@keyframes assign-dot-pulse {
+  from { opacity: 0.5; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1.2); }
+}
+
+.assign-eyebrow {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.55rem;
+  color: rgba(74, 158, 255, 0.5);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin-bottom: 2px;
 }
 
 .assign-title {
@@ -38,89 +110,109 @@
   font-weight: 900;
   color: #ffffff;
   text-transform: uppercase;
-  letter-spacing: 3px;
+  letter-spacing: 2px;
   margin: 0;
+  line-height: 1;
 }
 
 .assign-close {
-  width: 2rem;
-  height: 2rem;
+  width: 28px;
+  height: 28px;
   background: transparent;
-  border: 1px solid #d0d0d0;
-  color: #d0d0d0;
-  font-size: 1.3rem;
-  font-weight: 300;
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  color: rgba(74, 158, 255, 0.6);
+  font-size: 1.2rem;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 2px;
-  transition: all 0.2s ease;
-  font-family: 'Orbitron', sans-serif;
+  transition: all 0.2s;
 }
 
 .assign-close:hover {
-  background: #ffffff;
-  color: #000000;
+  background: #4a9eff;
+  border-color: #4a9eff;
+  color: #000;
 }
 
-/* Aviso somente leitura */
 .assign-readonly-notice {
-  font-size: 0.75rem;
-  color: #b8b8b8;
+  font-size: 0.65rem;
+  color: #ffae00;
   font-family: 'JetBrains Mono', monospace;
-  letter-spacing: 1px;
-  padding: 0.75rem 2rem;
-  border-bottom: 1px solid rgba(208, 208, 208, 0.2);
+  letter-spacing: 2px;
+  padding: 0.5rem 1.5rem;
+  border-bottom: 1px solid rgba(255, 174, 0, 0.2);
+  background: rgba(255, 174, 0, 0.05);
   margin: 0;
+  text-align: center;
 }
 
-/* Body scrollável */
 .assign-body {
   flex: 1;
   overflow-y: auto;
-  padding: 1.5rem 2rem;
+  padding: 1.5rem;
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+}
+
+.assign-empty-msg {
+  color: rgba(255, 255, 255, 0.3);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  text-align: center;
+  padding: 1rem 0;
 }
 
 /* Lista de jogadores */
 .assign-players {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.4rem;
 }
 
 .assign-player-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.75rem 1rem;
-  border: 1px solid rgba(208, 208, 208, 0.3);
+  padding: 0.8rem 1rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
   gap: 1rem;
-  transition: border-color 0.2s ease;
+  transition: all 0.2s ease;
+}
+
+.assign-player-row:hover {
+  background: rgba(74, 158, 255, 0.05);
+  border-color: rgba(74, 158, 255, 0.2);
 }
 
 .assign-player-row.is-copiloto {
-  border-color: #d0d0d0;
-  background: rgba(200, 200, 200, 0.05);
+  border-left: 2px solid #4a9eff;
+  background: rgba(74, 158, 255, 0.08);
 }
 
-/* Info do jogador */
 .assign-player-info {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  min-width: 0;
 }
 
 .assign-status-dot {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
-  transition: background 0.3s ease;
+}
+.assign-status-dot.online { background: #2aff8c; box-shadow: 0 0 8px rgba(42, 255, 140, 0.6); }
+.assign-status-dot.offline { background: rgba(255, 255, 255, 0.2); }
+
+.assign-player-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .assign-player-name {
@@ -129,12 +221,11 @@
   color: #ffffff;
   text-transform: uppercase;
   letter-spacing: 1px;
-  font-family: 'JetBrains Mono', monospace;
 }
 
 .assign-player-role {
-  font-size: 0.7rem;
-  color: #b8b8b8;
+  font-size: 0.6rem;
+  color: rgba(255, 255, 255, 0.5);
   font-family: 'JetBrains Mono', monospace;
   letter-spacing: 1px;
   text-transform: uppercase;
@@ -144,37 +235,37 @@
 .assign-player-controls {
   display: flex;
   gap: 0.4rem;
-  flex-shrink: 0;
 }
 
 .assign-btn {
-  padding: 0.3rem 0.6rem;
-  font-size: 0.65rem;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.6rem;
   font-weight: 700;
   font-family: 'Orbitron', sans-serif;
   letter-spacing: 1px;
   text-transform: uppercase;
   background: transparent;
-  border: 1px solid rgba(208, 208, 208, 0.4);
-  color: #b8b8b8;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.5);
   cursor: pointer;
-  border-radius: 2px;
   transition: all 0.2s ease;
 }
 
 .assign-btn:hover:not(:disabled) {
-  border-color: #ffffff;
-  color: #ffffff;
+  border-color: #4a9eff;
+  color: #4a9eff;
+  background: rgba(74, 158, 255, 0.05);
 }
 
 .assign-btn.active {
-  background: #ffffff;
-  border-color: #ffffff;
-  color: #000000;
+  background: rgba(74, 158, 255, 0.15);
+  border-color: #4a9eff;
+  color: #4a9eff;
+  box-shadow: 0 0 10px rgba(74, 158, 255, 0.2);
 }
 
 .assign-btn.blocked {
-  opacity: 0.25;
+  opacity: 0.2;
   cursor: not-allowed;
 }
 
@@ -183,135 +274,148 @@
   cursor: default;
 }
 
-/* Resumo de torretas */
+/* Resumo de torretas (Estilo Target Info do Attack Modal) */
 .assign-torretas-summary {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 0.75rem;
+  gap: 0.4rem;
 }
 
 .assign-torreta-card {
-  border: 1px solid rgba(208, 208, 208, 0.3);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-left: 2px solid rgba(74, 158, 255, 0.3);
   padding: 0.75rem;
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: 0.4rem;
+}
+
+.assign-torreta-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .assign-torreta-name {
-  font-size: 0.7rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.55rem;
+  color: rgba(255, 255, 255, 0.4);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.assign-torreta-caps {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.7);
   font-weight: 700;
-  color: #ffffff;
+  text-transform: uppercase;
+}
+
+.assign-torreta-ocupante {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.8rem;
+  font-weight: 700;
+  margin-top: 0.2rem;
   text-transform: uppercase;
   letter-spacing: 1px;
 }
 
-.assign-torreta-caps {
-  font-size: 0.65rem;
-  color: #b8b8b8;
-  font-family: 'JetBrains Mono', monospace;
-}
-
-.assign-torreta-ocupante {
-  font-size: 0.8rem;
-  font-family: 'JetBrains Mono', monospace;
-  font-weight: 700;
-  margin-top: 0.25rem;
-}
-
 .assign-torreta-ocupante.filled {
-  color: #98fbff;
+  color: #4a9eff;
+  text-shadow: 0 0 8px rgba(74, 158, 255, 0.4);
 }
 
 .assign-torreta-ocupante.empty {
-  color: rgba(200, 200, 200, 0.3);
+  color: rgba(255, 255, 255, 0.2);
 }
 
 /* Erro */
 .assign-error {
-  padding: 0.75rem 2rem;
-  font-size: 0.75rem;
-  color: #ff6b6b;
+  padding: 0.75rem 1.5rem;
+  font-size: 0.65rem;
+  color: #ff3c1e;
   font-family: 'JetBrains Mono', monospace;
-  border-top: 1px solid rgba(255, 107, 107, 0.3);
+  border-top: 1px solid rgba(255, 60, 30, 0.2);
+  background: rgba(255, 60, 30, 0.05);
+  text-transform: uppercase;
+  letter-spacing: 1px;
 }
 
 /* Footer */
 .assign-footer {
-  padding: 1rem 2rem;
-  border-top: 1px solid rgba(208, 208, 208, 0.3);
+  padding: 1rem 1.5rem 1.5rem;
   display: flex;
   justify-content: flex-end;
 }
 
 .assign-save-btn {
-  padding: 0.6rem 2rem;
-  font-size: 0.8rem;
-  font-weight: 700;
+  width: 100%;
+  padding: 0.8rem 1.5rem;
+  font-size: 0.75rem;
+  font-weight: 900;
   font-family: 'Orbitron', sans-serif;
-  letter-spacing: 2px;
+  letter-spacing: 3px;
   text-transform: uppercase;
-  background: transparent;
-  border: 2px solid #d0d0d0;
-  color: #d0d0d0;
+  background: rgba(74, 158, 255, 0.1);
+  border: 1px solid rgba(74, 158, 255, 0.4);
+  color: #4a9eff;
   cursor: pointer;
-  border-radius: 2px;
   transition: all 0.2s ease;
 }
 
 .assign-save-btn:hover {
-  background: #ffffff;
-  color: #000000;
+  background: #4a9eff;
+  color: #000;
+  box-shadow: 0 0 20px rgba(74, 158, 255, 0.4);
+}
+
+/* Bolinhas de reparo (Mantidas) */
+.assign-status-dots {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+}
+
+.status-dot.purple {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #b026ff;
+  box-shadow: 0 0 5px #b026ff;
+  animation: pulse-purple 1.5s infinite alternate;
+}
+
+.assign-torreta-card.status-avariada {
+  border-left-color: #b026ff;
+  background: rgba(176, 38, 255, 0.05);
+}
+.assign-torreta-card.status-destruida {
+  border-left-color: #ff3c1e;
+  opacity: 0.6;
+}
+
+.assign-repair-btn {
+  font-size: 0.5rem;
+  padding: 2px 6px;
+  background: rgba(176, 38, 255, 0.15);
+  border: 1px solid rgba(176, 38, 255, 0.5);
+  color: #b026ff;
+  cursor: pointer;
+  font-family: 'Orbitron', sans-serif;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.assign-repair-btn:hover {
+  background: #b026ff;
+  color: #000;
 }
 
 /* Mobile */
 @media (max-width: 768px) {
-  .assign-modal {
-    max-width: 100%;
-    max-height: 95vh;
-    margin: 0 0.5rem;
-  }
-
-  .assign-header,
-  .assign-body {
-    padding: 1rem 1.25rem;
-  }
-
-  .assign-player-row {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .assign-player-controls {
-    flex-wrap: wrap;
-  }
-
-  .assign-torretas-summary {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* Reaproveita os estilos das bolinhas roxas no modal de tripulação */
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  display: inline-block;
-}
-.status-dot.purple {
-  background: #b026ff;
-  box-shadow: 0 0 8px #b026ff;
-  animation: pulse-purple 1.5s infinite alternate;
-}
-.status-dot.black {
-  background: #111;
-  border: 1px solid #333;
-}
-.assign-torreta-card.status-avariada {
-  border-color: #b026ff;
-  background: rgba(176, 38, 255, 0.05);
-}
-.assign-torreta-card.status-destruida {
-  border-color: #000;
-  opacity: 0.6;
+  .assign-torretas-summary { grid-template-columns: 1fr; }
+  .assign-player-row { flex-direction: column; align-items: flex-start; gap: 0.8rem; }
+  .assign-player-controls { width: 100%; display: grid; grid-template-columns: 1fr 1fr; }
 }

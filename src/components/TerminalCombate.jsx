@@ -2,12 +2,15 @@ import React, { useState, useEffect, useRef } from "react";// Localize esta linh
 import { 
   getAllShips, 
   updateShipConfig, 
-  applyModuleDamage, // ADICIONE ESTA
-  processGlobalTurn  // ADICIONE ESTA
+  applyModuleDamage,
+  processGlobalTurn,
+  incrementMissileLock,
+  getShipMaxAttributes // <-- ADICIONE AQUI
 } from "../utils/mockApi";
 import { getEffect } from "../utils/effectHelpers";
 import { rollDamage, parseShield, rollHit } from "../utils/diceHelpers";
 import "../styles/TerminalCombate.css";
+import ConfirmModal from "./ConfirmModal";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -74,6 +77,8 @@ const CrewSlot = ({ member, attackerShip, allShips, onFire }) => {
     setTargetId("");
   };
 
+  const lockLevel = member.missileLockLevel || 0;
+
   return (
     <div className={`tc-crew-slot ${slotClass(member.role)} ${open ? "is-open" : ""}`}>
       
@@ -108,6 +113,15 @@ const CrewSlot = ({ member, attackerShip, allShips, onFire }) => {
         </span>
       </div>
 
+      {missiles && (
+    <div className="tc-missile-lock-indicator">
+      <span className="tc-lock-label">LOCK:</span>
+      <span className={`tc-lock-box ${lockLevel >= 1 ? 'filled' : ''}`}></span>
+      <span className={`tc-lock-box ${lockLevel >= 2 ? 'filled' : ''}`}></span>
+      <span className={`tc-lock-box ${lockLevel >= 3 ? 'filled blink-red' : ''}`}></span>
+    </div>
+  )}
+
       {/* Botão ATACAR — Dinâmico com base no Status */}
       {fires && !open && (
         <button 
@@ -138,7 +152,22 @@ const CrewSlot = ({ member, attackerShip, allShips, onFire }) => {
           <div className="tc-fire-row">
             <button
               className="tc-cancel-btn"
-              onClick={() => { setOpen(false); setTargetId(""); }}
+              onClick={() => { 
+                setOpen(false); 
+                setTargetId(""); 
+                // REGRA 2: Cancelar mira limpa do banco de dados também
+                if (member.missileTarget) {
+                  const ships = getAllShips();
+                  const ship = ships[attackerShip.id];
+                  const crewMember = ship.activeCrew.find(m => m.id === member.id);
+                  if (crewMember) {
+                    crewMember.missileTarget = null;
+                    crewMember.missileLockLevel = 0;
+                    crewMember.missileReady = false;
+                    localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
+                  }
+                }
+              }}
             >
               ✕
             </button>
@@ -160,11 +189,13 @@ const CrewSlot = ({ member, attackerShip, allShips, onFire }) => {
 
 // Componente de ajuste rápido para o Mestre
 const ShipAttributeAdjuster = ({ ship, onUpdate }) => {
+  const maxAttrs = getShipMaxAttributes(ship); // NOVO
   const handleLevelChange = (attr, delta) => {
   const currentAttrs = { ...ship.attributes };
 
   const currentTotal = Object.values(currentAttrs).reduce((sum, v) => sum + v, 0);
   const currentValue = currentAttrs[attr] || 0;
+const maxAllowed = maxAttrs[attr]; // NOVO
 
   // impedir valores negativos
   if (currentValue + delta < 0) return;
@@ -174,6 +205,7 @@ const ShipAttributeAdjuster = ({ ship, onUpdate }) => {
 
     // impedir valor > 6
   if (currentValue + delta > 6) return;
+  if (currentValue + delta > maxAllowed) return;
   
   const newAttrs = {
     ...currentAttrs,
@@ -275,6 +307,7 @@ const CombatLog = ({ entries }) => (
   </div>
 );
 
+
 // ─── Componente Principal ─────────────────────────────────────────────────────
 
 const TerminalCombate = ({ onBack }) => {
@@ -283,6 +316,10 @@ const TerminalCombate = ({ onBack }) => {
   const [combatLog,     setCombatLog]     = useState([]);
   const [lastRefresh,   setLastRefresh]   = useState(new Date());
   const turnSound = useRef(new Audio('/passarturno.wav'));
+ // SUBSTITUA showTurnConfirm POR ISTO AQUI:
+  const [modalConfig, setModalConfig] = useState({ isOpen: false });
+  const closeConfirm = () => setModalConfig({ ...modalConfig, isOpen: false });
+  const missileReadySound = useRef(new Audio('/missileready.wav'));
 
   const refresh = () => {
     const ships = getAllShips();
@@ -323,7 +360,7 @@ const handleFire = (member, attackerShip, targetId, missiles) => {
     const ships = getAllShips();
     const target = ships[targetId];
 
-    // --- NOVO: VERIFICAÇÃO DE RECARGA ---
+    // --- VERIFICAÇÃO DE RECARGA ---
     if (missiles && attackerShip.missileCooldown > 0) {
       addLog({ 
         hit: false, 
@@ -336,9 +373,10 @@ const handleFire = (member, attackerShip, targetId, missiles) => {
       const attackerCrewMember = ships[attackerShip.id].activeCrew.find(m => m.id === member.id);
 
       if (attackerCrewMember.missileTarget !== targetId) {
-        // Inicia a mira e para a função (não atira ainda)
+        // INICIA A MIRA E PARA A FUNÇÃO
         attackerCrewMember.missileTarget = targetId;
         attackerCrewMember.missileReady = false;
+        attackerCrewMember.missileLockLevel = 0; // Garante inicio em 0
         localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
 
         addLog({ hit: false, text: `⚠️ ${attackerShip.name} iniciou travamento de mira em ${target.name}!` });
@@ -348,63 +386,75 @@ const handleFire = (member, attackerShip, targetId, missiles) => {
         addLog({ hit: false, text: `⏳ ${attackerShip.name} ainda está calculando a mira. Aguarde o Turno Global.` });
         return;
       } else {
-        // --- CORREÇÃO: Limpa a mira, INICIA A RECARGA e permite o dano! ---
-        attackerCrewMember.missileTarget = null;
-        attackerCrewMember.missileReady = false;
-        
-        // Aplica o cooldown na memória antes de salvar
-        ships[attackerShip.id].missileCooldown = 2; 
-        
-        localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
+        // Se atirou, limpa a mira, mas ISSO AQUI SÓ É CHAMADO DEPOIS DO TIRO. 
+        // Vou deixar a lógica limpar tudo de forma absoluta lá no final do disparo (acerto ou erro).
       }
     }
     
-    // ... O resto da função original a partir de: "const precisao = member.precisao || 50;"
     const precisao = member.precisao || 50;
 
     // Configura os dados da arma
     const weaponLabel = missiles ? "Mísseis" : "Armas";
     const attrLevel = attackerShip.attributes[missiles ? "missiles" : "weapons"];
     const effectStr = getEffect(attackerShip.shipClass, missiles ? "missiles" : "weapons", attrLevel);
+    const attackerCrewMember = ships[attackerShip.id].activeCrew.find(m => m.id === member.id);
+    let lockLevel = attackerCrewMember.missileLockLevel || 0;
+    let advantageLevel = 1;
 
-    // d100 com verificação de extremo
-    const { acertou, isExtremo, rolou } = rollHit(precisao);
+    if (missiles) {
+      if (lockLevel === 2) advantageLevel = 2;
+      if (lockLevel >= 3) advantageLevel = 3;
+    }
 
+    // A rolagem agora usa o advantageLevel
+    const { acertou, isExtremo, rolou, allRolls } = rollHit(precisao, advantageLevel);
+    
     // LOG DE FALHA
     if (!acertou) {
+      const logRolls = missiles && advantageLevel > 1 ? `[${allRolls.join(', ')}] -> ` : '';
+      
       const msgFalha = [
         `${member.id} [${weaponLabel} Nv.${attrLevel}: ${effectStr}]`,
         `→ ${target.name}`,
-        `| d100: ${rolou}/${precisao}% ✗`,
+        `| d100: ${logRolls}${rolou}/${precisao}% ✗`,
         `| ERROU O ALVO`
       ].join("  ");
       
-      // --- COMUNICAÇÃO ENTRE GUIAS: Avisa o Painel do Jogador que o tiro FALHOU ---
+      // Comunica falha ao Painel do Jogador
       localStorage.setItem("last_combat_event", JSON.stringify({
-        targetName: target.name,
-        damage: 0,
-        isAbsorbed: false, 
-        timestamp: Date.now(),
-        logText: msgFalha
+        targetName: target.name, damage: 0, isAbsorbed: false, timestamp: Date.now(), logText: msgFalha
       }));
-
       addLog({ hit: false, text: msgFalha });
+
+      if (missiles) {
+        // REGRA 3: Limpeza completa da mira em caso de erro
+        attackerCrewMember.missileLockLevel = 0;
+        attackerCrewMember.missileTarget = null; 
+        attackerCrewMember.missileReady = false; 
+        ships[attackerShip.id].missileCooldown = 2;
+        localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
+      }
       return;
     }
 
-    // Puxar dano (usando flag isExtremo)
+    // Puxar dano e abater escudo
     const { total: rawDamage, isCritico, breakdown } = rollDamage(effectStr, isExtremo);
-
-    // Redução de escudo
     const shieldValue = parseShield(getEffect(target.shipClass, "shields", target.attributes.shields));
     const finalDamage = Math.max(0, rawDamage - shieldValue);
     
     // Aplicar dano estrutural
-    // Aplicar dano estrutural
-    const newHP = Math.max(0, target.currentHP - finalDamage);
-    updateShipConfig(targetId, { currentHP: newHP });
+    // Dentro de handleFire no TerminalCombate.jsx
+const newHP = Math.max(0, target.currentHP - finalDamage);
 
-    // --- NOVO: DESTRUIÇÃO AUTOMÁTICA ---
+// 1. Salva no banco (isso já dispara o evento 'storage' para outras abas)
+updateShipConfig(targetId, { currentHP: newHP });
+
+// 2. Para garantir que o navegador entenda a mudança imediatamente:
+window.dispatchEvent(new StorageEvent('storage', {
+  key: 'heavens_door_ships_db',
+  newValue: JSON.stringify(getAllShips())
+}));
+    // DESTRUIÇÃO AUTOMÁTICA
     if (newHP <= 0 && target.status !== "destruida") {
       setTimeout(() => {
         const currentShips = getAllShips();
@@ -414,52 +464,67 @@ const handleFire = (member, attackerShip, targetId, missiles) => {
         }
       }, 4000);
     }
-      const tags = [];
-if (isExtremo) tags.push("[EXTREMO!]");
-else if (isCritico) tags.push("[CRÍTICO!]");
+    
+    const tags = [];
+    if (isExtremo) tags.push("[EXTREMO!]");
+    else if (isCritico) tags.push("[CRÍTICO!]");
 
-   let moduleMsg = "";
-let moduleTag = ""; // ← NOVO
-if ((isCritico || isExtremo) && finalDamage > 0 && target.activeCrew?.length > 0) {  const alvosAvariaveis = target.activeCrew.filter(m => {
-    if (!m.function) return false;
-    if (m.function.includes("TORRETA")) return true;
-    if (target.shipClass === "type_II" && m.function.includes("COPILOTO")) return true;
-    return false;
-  });
-  
-  if (alvosAvariaveis.length > 0) {
-    const randomModule = alvosAvariaveis[Math.floor(Math.random() * alvosAvariaveis.length)];
-    moduleMsg = applyModuleDamage(targetId, randomModule.id);
-    moduleTag = `[MÓDULO: ${moduleMsg}]`; // ← NOVO: cria a tag
-  }
-}
+    let moduleMsg = "";
+    let moduleTag = ""; 
+    
+    if ((isCritico || isExtremo) && finalDamage > 0 && target.activeCrew?.length > 0) {  
+      const alvosAvariaveis = target.activeCrew.filter(m => {
+        if (!m.function) return false;
+        if (m.function.includes("TORRETA")) return true;
+        if (target.shipClass === "type_II" && m.function.includes("COPILOTO")) return true;
+        return false;
+      });
+      
+      if (alvosAvariaveis.length > 0) {
+        const randomModule = alvosAvariaveis[Math.floor(Math.random() * alvosAvariaveis.length)];
+        moduleMsg = applyModuleDamage(targetId, randomModule.id);
+        moduleTag = `[MÓDULO: ${moduleMsg}]`; 
+      }
+    }
 
-// LOG DE ACERTO
-const msg = [
-  `${member.id} [${weaponLabel} Nv.${attrLevel}: ${effectStr}]`,
+    // LOG DE ACERTO
+
+const logRolls = missiles && advantageLevel > 1 ? `[${allRolls.join(', ')}] -> ` : '';
+const advantageLabel = advantageLevel === 2 ? " [VANTAGEM]" : advantageLevel === 3 ? " [SUPER VANTAGEM]" : ""
+
+    const msg = [
+  `${member.id} [${weaponLabel} Nv.${attrLevel}: ${effectStr}]${advantageLabel}`,
   `→ ${target.name}`,
-  `| d100: ${rolou}/${precisao}% ✓`,
+  `| d100: ${logRolls}${rolou}/${precisao}% ✓`, // Mostra os dados rolados e o escolhido
   `| Rolou: ${breakdown} = ${rawDamage}`,
   `| Escudo: -${shieldValue}`,
   `| Dano: ${finalDamage} HP`,
   `| HP: ${newHP}/${target.maxHP}`,
   ...tags,
-  ...(moduleTag ? [moduleTag] : []), // ← NOVO: inclui a tag no log
+  ...(moduleTag ? [moduleTag] : []),
 ].join("  ");
 
-
-    // --- COMUNICAÇÃO ENTRE GUIAS: Avisa o Painel do Jogador do DANO ou se foi ABSORVIDO ---
+    // Comunica acerto ao Painel do Jogador
     localStorage.setItem("last_combat_event", JSON.stringify({
       targetName: target.name,
       damage: finalDamage,
-      isAbsorbed: rawDamage > 0 && finalDamage === 0, // Se rolou > 0 mas o dano final foi 0 = Absorvido
+      isAbsorbed: rawDamage > 0 && finalDamage === 0,
       timestamp: Date.now(),
       logText: msg
     }));
 
     addLog({ hit: true, text: msg });
+
+    if (missiles) {
+      // REGRA 3: Limpeza completa da mira em caso de ACERTO
+      attackerCrewMember.missileLockLevel = 0;
+      attackerCrewMember.missileTarget = null;
+      attackerCrewMember.missileReady = false;
+      ships[attackerShip.id].missileCooldown = 2;
+      localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
+    }
     refresh();
-  };
+}
 
   const addLog = (entry) => {
     const time = new Date().toLocaleTimeString("pt-BR", {
@@ -475,6 +540,66 @@ const msg = [
     hour: "2-digit", minute: "2-digit", second: "2-digit",
   });
 
+  // Adicione esta função antes do return do componente
+  const handleConfirmTurn = () => {
+
+    setModalConfig(prev => ({ ...prev, isOpen: false }));
+
+    // Dispara o som
+    if (turnSound.current) {
+      turnSound.current.currentTime = 0; 
+      turnSound.current.play().catch(e => console.warn("Áudio bloqueado:", e));
+    }
+    
+    // Incrementa a trava de mísseis para todas as naves
+    const ships = getAllShips();
+    let alertas = [];
+    Object.values(ships).forEach(ship => {
+      if (ship.status === 'ativa' || !ship.isEnemy) {
+          const alertasNave = incrementMissileLock(ship.id);
+          if(alertasNave && alertasNave.length > 0) alertas.push(...alertasNave);
+      }
+    });
+
+    const reparos = processGlobalTurn();
+    if (reparos.length > 0) {
+      reparos.forEach(msg => addLog({ hit: false, text: `🔧 ${msg}` }));
+      const fullMsg = `🔧 ` + reparos.join(" | 🔧 ");
+      const repairEvent = {
+        targetName: "Sistema", damage: 0, isAbsorbed: false, isRepair: true,
+        timestamp: Date.now(), logText: fullMsg
+      };
+      localStorage.setItem("last_combat_event", JSON.stringify(repairEvent));
+      window.dispatchEvent(new CustomEvent("combat:event", { detail: repairEvent }));
+    }
+    
+    refresh();
+
+    // Exibe os alertas de Trava Nível 3, se houver
+    if (alertas.length > 0) {
+      setTimeout(() => {
+        // NOVO: Toca o som de Míssil Pronto
+        if (missileReadySound.current) {
+          missileReadySound.current.currentTime = 0;
+          missileReadySound.current.volume = 1.0;
+          missileReadySound.current.play().catch(e => console.warn("Áudio bloqueado:", e));
+        }
+        
+        // NOVO: Abre o modal de Alerta Crítico (Vermelho)
+        setModalConfig({
+          isOpen: true,
+          title: "ALERTA TÁTICO",
+          message: alertas.join("\n\n"),
+          subtext: "TRAVA MÁXIMA DE MÍSSIL ATINGIDA — LANÇAMENTO IMINENTE",
+          variant: "danger", // Deixa o modal vermelho
+          confirmLabel: "CIENTE",
+          hideCancel: true, // Esconde o botão de cancelar
+          onConfirm: closeConfirm
+        });
+      }, 400); // 400ms para dar tempo da tela atualizar o HP antes do aviso pular
+    }
+  };
+
   return (
     <div className="terminal-combate">
       <header className="tc-header">
@@ -487,44 +612,62 @@ const msg = [
         </div>
 
         <div className="tc-header-right">
+        {/* Substitua o botão "PASSAR TURNO GLOBAL" por este: */}
         <button 
-            className="tc-fire-btn" 
-            style={{ background: '#ffae00', color: '#000', width: 'auto', padding: '0.5rem 1rem' }}
-            onClick={() => {
+          className="tc-fire-btn" 
+          style={{ background: '#ffae00', color: '#000', width: 'auto', padding: '0.5rem 1rem' }}
+          // - No JSX do TerminalCombate, localize o botão e substitua o onClick:
+onClick={() => {
+  const ships = getAllShips();
+  let bloqueios = [];
 
-              if (turnSound.current) {
-                turnSound.current.currentTime = 0; // Reseta o som caso clique rápido
-                turnSound.current.play().catch(e => console.warn("Áudio bloqueado:", e));
-              }
-              
-              const reparos = processGlobalTurn();
-              if (reparos.length > 0) {
-                // Adiciona ao log local do mestre
-                reparos.forEach(msg => addLog({ hit: false, text: `🔧 ${msg}` }));
-                
-                // Agrupa as mensagens se houver mais de um reparo no mesmo turno
-                const fullMsg = `🔧 ` + reparos.join(" | 🔧 ");
-                
-                // Cria o evento de reparo
-                const repairEvent = {
-                  targetName: "Sistema",
-                  damage: 0,
-                  isAbsorbed: false,
-                  isRepair: true, // Nova flag para identificar o reparo
-                  timestamp: Date.now(),
-                  logText: fullMsg
-                };
+  // Verifica se alguém está com lock level 3
+  Object.values(ships).forEach(s => {
+    if (s.activeCrew) {
+      s.activeCrew.forEach(m => {
+        if (m.missileLockLevel >= 3) {
+          bloqueios.push(`${s.name} (${m.function})`);
+        }
+      });
+    }
+  });
 
-                // Dispara para outras abas (Painel do Jogador)
-                localStorage.setItem("last_combat_event", JSON.stringify(repairEvent));
-                // Dispara para a mesma aba (caso o mestre esteja com o painel aberto em background)
-                window.dispatchEvent(new CustomEvent("combat:event", { detail: repairEvent }));
-              }
-              refresh();
-            }}
-          >
-           PASSAR TURNO GLOBAL
-          </button>
+  // Se houver mísseis travados, impede a passagem de turno
+  if (bloqueios.length > 0) {
+    if (missileReadySound.current) {
+      missileReadySound.current.currentTime = 0;
+      missileReadySound.current.play().catch(() => {});
+    }
+
+    setModalConfig({
+      isOpen: true,
+      title: "SISTEMA TRAVADO",
+      message: `Impossível avançar o Turno Global.\nAs seguintes naves atingiram carga máxima de mísseis e devem disparar:\n\n${bloqueios.join("\n")}`,
+      subtext: "PROTOCOLO DE SEGURANÇA ATIVO",
+      variant: "danger",
+      confirmLabel: "CIENTE",
+      hideCancel: true,
+      onConfirm: closeConfirm
+    });
+    return; // Interrompe a execução aqui
+  }
+
+  // Caso não haja bloqueios, abre o modal normal de passar turno
+  setModalConfig({
+    isOpen: true,
+    title: "AVANÇAR TURNO GLOBAL",
+    message: "Deseja processar os cálculos de trajetória, recarga de mísseis e reparos de sistemas para todas as naves?",
+    subtext: "ESTA AÇÃO É IRREVERSÍVEL",
+    variant: "warning",
+    confirmLabel: "CONFIRMAR TURNO",
+    cancelLabel: "CANCELAR",
+    hideCancel: false,
+    onConfirm: handleConfirmTurn
+  });
+}}
+        >
+          PASSAR TURNO GLOBAL
+        </button>
           <div className="tc-stat">
             <span className="tc-stat-label">Naves Ativas</span>
             <span className="tc-stat-value">{activeEnemies.length}</span>
@@ -572,6 +715,21 @@ const msg = [
         </span>
         <span className="tc-footer-text">AUTO-REFRESH <span>5s</span></span>
       </footer>
+{/* ... footer continua acima ... */}
+      
+      {/* Substitua o antigo ConfirmModal por este dinâmico: */}
+      <ConfirmModal
+        isOpen={modalConfig.isOpen}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        subtext={modalConfig.subtext}
+        variant={modalConfig.variant}
+        confirmLabel={modalConfig.confirmLabel}
+        cancelLabel={modalConfig.cancelLabel}
+        hideCancel={modalConfig.hideCancel}
+        onConfirm={modalConfig.onConfirm}
+        onCancel={closeConfirm}
+      />
     </div>
   );
 };

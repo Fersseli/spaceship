@@ -2,8 +2,10 @@ import React, { useState, useEffect } from "react";
 import { playersList } from "../utils/players";
 import { shipsList } from "../data/ships";
 import "../styles/AdminDashboard.css";
-import { getAllShips, updateShipConfig, setEnemyShipStatus, clearDestroyedEnemies, deactivateAllEnemies, repairAllShipsGlobal} from "../utils/mockApi";
+import { getAllShips, updateShipConfig, setEnemyShipStatus, clearDestroyedEnemies, deactivateAllEnemies, repairAllShipsGlobal, enforceAttributeLimits } from "../utils/mockApi";
 import TerminalCombate from "./TerminalCombate"; // ajuste o caminho se necessário
+ import ConfirmModal from "./ConfirmModal";
+
 
 const applySorting = (data, config) => {
   const { key, direction } = config;
@@ -26,6 +28,9 @@ const AdminDashboard = ({ onLogout }) => {
   // ESTADOS ANTIGOS (Monitoramento de Usuários)
   const [usersData, setUsersData] = useState([]);
   const [sortConfig, setSortConfig] = useState({ key: "label", direction: "asc" });
+  const [confirmState, setConfirmState] = useState({ isOpen: false });
+  const showConfirm = (opts) => setConfirmState({ isOpen: true, ...opts });
+  const closeConfirm = () => setConfirmState(prev => ({ ...prev, isOpen: false }));
 
   // --- NOVOS ESTADOS PARA A ENGENHARIA DE FROTA (AGORA AQUI DENTRO!) ---
   const [activeTab, setActiveTab] = useState("crew"); 
@@ -52,6 +57,7 @@ const handleAcceptRepair = (req) => {
     if (member) {
       member.moduleStatus = 'operacional';
       member.turnosParaReparo = 0;
+      enforceAttributeLimits(ship); // NOVO: Libera a energia devolta
       localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
     }
   }
@@ -251,12 +257,19 @@ const refreshData = () => {
         className="fleet-save-btn header-btn" 
         style={{ background: 'rgba(42, 255, 140, 0.1)', color: '#2aff8c', border: '1px solid #2aff8c', margin: 0, padding: '0.5rem 1rem', fontSize: '0.7rem' }}
         onClick={() => {
-          if(window.confirm("Restaurar integridade de TODAS as naves?")) {
-            repairAllShipsGlobal();
-            setFleetData(getAllShips());
-            refreshData();
-          }
-        }}
+    showConfirm({
+      title: "REPARO GLOBAL",
+      message: "Restaurar integridade estrutural e módulos de TODAS as naves da frota?",
+      subtext: "OPERAÇÃO IRREVERSÍVEL — AFETA TODOS OS REGISTROS",
+      variant: "success",
+      confirmLabel: "EXECUTAR REPARO",
+      onConfirm: () => {
+        repairAllShipsGlobal();
+        setFleetData(getAllShips());
+        refreshData();
+      },
+    });
+  }}
       >
         REPARO GLOBAL
       </button>
@@ -265,12 +278,19 @@ const refreshData = () => {
         className="fleet-save-btn header-btn" 
         style={{ background: 'rgba(255, 174, 0, 0.1)', color: '#ffae00', border: '1px solid #ffae00', margin: 0, padding: '0.5rem 1rem', fontSize: '0.7rem' }}
         onClick={() => {
-          if(window.confirm("Desativar todas as naves hostis?")) {
-            deactivateAllEnemies();
-            setFleetData(getAllShips());
-            refreshData();
-          }
-        }}
+    showConfirm({
+      title: "DESATIVAR HOSTIS",
+      message: "Desativar e remover a tripulação de todas as naves hostis ativas?",
+      subtext: "NAVES DESTRUÍDAS PERMANECEM NO REGISTRO",
+      variant: "warning",
+      confirmLabel: "DESATIVAR TODAS",
+      onConfirm: () => {
+        deactivateAllEnemies();
+        setFleetData(getAllShips());
+        refreshData();
+      },
+    });
+  }}
       >
         DESATIVAR TODAS
       </button>
@@ -279,10 +299,19 @@ const refreshData = () => {
         className="fleet-save-btn header-btn" 
         style={{ background: 'rgba(255, 50, 50, 0.1)', color: '#ff4a4a', border: '1px solid #ff4a4a', margin: 0, padding: '0.5rem 1rem', fontSize: '0.7rem' }}
         onClick={() => {
-          clearDestroyedEnemies();
-          setFleetData(getAllShips());
-          refreshData();
-        }}
+    showConfirm({
+      title: "PURGAR DESTRUÍDAS",
+      message: "Remover todos os registros de naves hostis destruídas do banco de dados?",
+      subtext: "DADOS ELIMINADOS PERMANENTEMENTE",
+      variant: "danger",
+      confirmLabel: "PURGAR REGISTROS",
+      onConfirm: () => {
+        clearDestroyedEnemies();
+        setFleetData(getAllShips());
+        refreshData();
+      },
+    });
+  }}
       >
         PURGAR DESTRUÍDAS
       </button>
@@ -511,6 +540,17 @@ const refreshData = () => {
     ))}
   </div>
 )}
+<ConfirmModal
+    isOpen={confirmState.isOpen}
+    title={confirmState.title}
+    message={confirmState.message}
+    subtext={confirmState.subtext}
+    variant={confirmState.variant}
+    confirmLabel={confirmState.confirmLabel}
+    onConfirm={() => { confirmState.onConfirm && confirmState.onConfirm(); closeConfirm(); }}
+    onCancel={closeConfirm}
+  />
+
     </div>
   );
 };
