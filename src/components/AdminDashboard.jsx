@@ -2,7 +2,8 @@ import React, { useState, useEffect } from "react";
 import { playersList } from "../utils/players";
 import { shipsList } from "../data/ships";
 import "../styles/AdminDashboard.css";
-import { getAllShips, updateShipConfig, setEnemyShipStatus, clearDestroyedEnemies } from "../utils/mockApi";
+import { getAllShips, updateShipConfig, setEnemyShipStatus, clearDestroyedEnemies, deactivateAllEnemies, repairAllShipsGlobal} from "../utils/mockApi";
+import TerminalCombate from "./TerminalCombate"; // ajuste o caminho se necessário
 
 const applySorting = (data, config) => {
   const { key, direction } = config;
@@ -31,6 +32,39 @@ const AdminDashboard = ({ onLogout }) => {
   const [fleetData, setFleetData] = useState({});
   const [selectedShipId, setSelectedShipId] = useState("");
   const [editForm, setEditForm] = useState({ name: "", maxHP: 0, totalPoints: 0 });
+  const [isCombatMode, setIsCombatMode] = useState(false);
+const [repairRequests, setRepairRequests] = useState([]);
+
+useEffect(() => {
+  const checkRequests = () => {
+    const reqs = JSON.parse(localStorage.getItem("repair_requests") || "[]");
+    setRepairRequests(reqs);
+  };
+  const interval = setInterval(checkRequests, 2000);
+  return () => clearInterval(interval);
+}, []);
+
+const handleAcceptRepair = (req) => {
+  const ships = getAllShips();
+  const ship = ships[req.shipId];
+  if (ship && ship.activeCrew) {
+    const member = ship.activeCrew.find(m => m.id === req.moduleId);
+    if (member) {
+      member.moduleStatus = 'operacional';
+      member.turnosParaReparo = 0;
+      localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
+    }
+  }
+  // Remove da lista
+  const filtered = repairRequests.filter(r => r.id !== req.id);
+  localStorage.setItem("repair_requests", JSON.stringify(filtered));
+  refreshData();
+};
+
+const handleRejectRepair = (reqId) => {
+  const filtered = repairRequests.filter(r => r.id !== reqId);
+  localStorage.setItem("repair_requests", JSON.stringify(filtered));
+};
 
   // Carrega as naves sempre que a aba "Frota" for aberta
   useEffect(() => {
@@ -174,6 +208,10 @@ const refreshData = () => {
     return () => clearInterval(interval);
   }, [sortConfig]);
 
+  if (isCombatMode) {
+    return <TerminalCombate onBack={() => setIsCombatMode(false)} />;
+  }
+
   return (
     <div className="admin-dashboard-screen">
       <div className="hazard-sidebar">
@@ -194,16 +232,63 @@ const refreshData = () => {
 
         <div className="admin-dashboard-container">
           {/* Cabeçalho reestilizado para parecer um documento oficial */}
-          <header className="admin-header">
-            <div>
-              <h1 className="datapad-title">Heaven's Systems Log</h1>
-              <div className="datapad-metadata">
-                Heaven's Door Internal Network<br/>
-                Status: Live Monitoring<br/>
-                Date: {new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}/2313
-              </div>
-            </div>
-          </header>
+          {/* --- LOCALIZAÇÃO: src/components/AdminDashboard.jsx --- */}
+
+<header className="admin-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+  <div>
+    <h1 className="datapad-title">Heaven's Systems Log</h1>
+    <div className="datapad-metadata">
+      Heaven's Door Internal Network<br/>
+      Status: Live Monitoring<br/>
+      Date: {new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}/2313
+    </div>
+  </div>
+
+  {/* NOVO BLOCO DE BOTÕES NO HEADER (Só visível na Aba Frota) */}
+  {activeTab === "fleet" && (
+    <div className="header-fleet-controls" style={{ display: 'flex', gap: '0.5rem' }}>
+      <button 
+        className="fleet-save-btn header-btn" 
+        style={{ background: 'rgba(42, 255, 140, 0.1)', color: '#2aff8c', border: '1px solid #2aff8c', margin: 0, padding: '0.5rem 1rem', fontSize: '0.7rem' }}
+        onClick={() => {
+          if(window.confirm("Restaurar integridade de TODAS as naves?")) {
+            repairAllShipsGlobal();
+            setFleetData(getAllShips());
+            refreshData();
+          }
+        }}
+      >
+        REPARO GLOBAL
+      </button>
+
+      <button 
+        className="fleet-save-btn header-btn" 
+        style={{ background: 'rgba(255, 174, 0, 0.1)', color: '#ffae00', border: '1px solid #ffae00', margin: 0, padding: '0.5rem 1rem', fontSize: '0.7rem' }}
+        onClick={() => {
+          if(window.confirm("Desativar todas as naves hostis?")) {
+            deactivateAllEnemies();
+            setFleetData(getAllShips());
+            refreshData();
+          }
+        }}
+      >
+        DESATIVAR TODAS
+      </button>
+
+      <button 
+        className="fleet-save-btn header-btn" 
+        style={{ background: 'rgba(255, 50, 50, 0.1)', color: '#ff4a4a', border: '1px solid #ff4a4a', margin: 0, padding: '0.5rem 1rem', fontSize: '0.7rem' }}
+        onClick={() => {
+          clearDestroyedEnemies();
+          setFleetData(getAllShips());
+          refreshData();
+        }}
+      >
+        PURGAR DESTRUÍDAS
+      </button>
+    </div>
+  )}
+            </header>
 
           {/* --- MENU DE ABAS DO ADMIN --- */}
           <div className="admin-tabs">
@@ -218,6 +303,15 @@ const refreshData = () => {
               onClick={() => setActiveTab("fleet")}
             >
               [ 02. FROTA ]
+            </button>
+            <button 
+              className="admin-tab-btn"
+              style={{
+                borderColor: 'rgba(255, 60, 30, 0.5)',
+                color: '#ff5028',
+              }}
+              onClick={() => window.open('/terminal-combate', 'terminal-combate')}            >
+              [ 03. TERMINAL ]
             </button>
           </div>
 
@@ -321,21 +415,7 @@ const refreshData = () => {
                   ))}
                 </div>
                 
-                {/* BOTÃO DE PURGAR CEMITÉRIO */}
-                <button 
-                  className="fleet-save-btn" 
-                  style={{ marginTop: 'auto', background: 'rgba(255, 50, 50, 0.1)', color: '#ff4a4a', border: '1px solid #ff4a4a' }}
-                  onClick={() => {
-                    clearDestroyedEnemies();
-                    setFleetData(getAllShips());
-                    refreshData();
-                    alert("Cemitério purgado. Nomes liberados para novos esquadrões.");
-                  }}
-                >
-                  PURGAR DESTRUÍDAS
-                </button>
-              </div>
-
+                    </div>
               <div className="fleet-editor-panel">
                 <h3 className="fleet-panel-title">ESPECIFICAÇÕES DO SISTEMA</h3>
                 
@@ -415,6 +495,22 @@ const refreshData = () => {
         <div className="datapad-right-spine"></div>
         
       </div>
+      {repairRequests.length > 0 && (
+  <div className="repair-popup-overlay" style={{ position: 'fixed', bottom: '20px', right: '20px', zIndex: 9999 }}>
+    {repairRequests.map(req => (
+      <div key={req.id} style={{ background: '#1a1a1a', border: '1px solid #b026ff', padding: '15px', marginBottom: '10px', boxShadow: '0 0 15px rgba(176, 38, 255, 0.4)' }}>
+        <h4 style={{ color: '#b026ff', margin: '0 0 5px 0', fontSize: '0.8rem' }}>SOLICITAÇÃO DE REPARO</h4>
+        <p style={{ fontSize: '0.7rem', color: '#ccc' }}>
+          A nave <b>{req.shipName}</b> solicita reparo imediato no módulo <b>{req.module}</b>.
+        </p>
+        <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+          <button onClick={() => handleAcceptRepair(req)} style={{ background: '#2aff8c', color: '#000', border: 'none', padding: '5px 10px', fontSize: '0.7rem', cursor: 'pointer', fontWeight: 'bold' }}>ACEITAR</button>
+          <button onClick={() => handleRejectRepair(req.id)} style={{ background: '#ff4a4a', color: '#fff', border: 'none', padding: '5px 10px', fontSize: '0.7rem', cursor: 'pointer' }}>RECUSAR</button>
+        </div>
+      </div>
+    ))}
+  </div>
+)}
     </div>
   );
 };

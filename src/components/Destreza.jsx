@@ -86,7 +86,7 @@ const DexterityRanking = ({ onClose }) => {
             <div key={`${p.id}-${index}`} className={`dex-card ${p.isEnemy ? 'enemy' : ''}`}>
               <div className="dex-row-top">
                 <span className="dex-name">
-                {index + 1}. CMDT. {p.label}
+                {index + 1}. <span className="dex-cmdt">CMDT</span>. {p.label}
                 </span>
                 <span className="dex-stats">(D:{p.des} | E:{p.esq})</span>
               </div>

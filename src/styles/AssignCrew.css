@@ -290,3 +290,28 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Reaproveita os estilos das bolinhas roxas no modal de tripulação */
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.status-dot.purple {
+  background: #b026ff;
+  box-shadow: 0 0 8px #b026ff;
+  animation: pulse-purple 1.5s infinite alternate;
+}
+.status-dot.black {
+  background: #111;
+  border: 1px solid #333;
+}
+.assign-torreta-card.status-avariada {
+  border-color: #b026ff;
+  background: rgba(176, 38, 255, 0.05);
+}
+.assign-torreta-card.status-destruida {
+  border-color: #000;
+  opacity: 0.6;
+}

@@ -2,6 +2,10 @@ import React, { useState } from "react";
 import "./App.css";
 import LoginScreen from "./components/LoginScreen";
 import ShipDashboard from "./components/ShipDashboard";
+// No topo
+import TerminalCombate from "./components/TerminalCombate";
+
+// No return, antes do resto:
 
 // Componente principal da aplicação
 const App = () => {
@@ -20,7 +24,11 @@ const App = () => {
     setPlayerData(null);
   };
 
+  if (window.location.pathname === '/terminal-combate') {
+  return <TerminalCombate onBack={() => window.close()} />;
+}
   return (
+    
     <div className="app">
       {/* Renderiza a tela de login ou o painel baseado no estado */}
       {playerData === null ? (

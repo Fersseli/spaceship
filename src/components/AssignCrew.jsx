@@ -226,34 +226,82 @@ const AssignCrew = ({ currentPlayer, currentRole, onClose }) => {
             })}
           </div>
 
-          {/* Resumo de torretas */}
+{/* Resumo de torretas com indicadores de avaria */}
           <div className="assign-torretas-summary">
-            {/* Vaga de copiloto (só Hawthorne) */}
-            {hasCopiloto && (
-              <div className="assign-torreta-card">
-                <div className="assign-torreta-name">Co-piloto</div>
-                <div className="assign-torreta-caps">Controles · Navegação</div>
-                <div className={`assign-torreta-ocupante ${assignments.copiloto ? "filled" : "empty"}`}>
-                  {assignments.copiloto || "—"}
-                </div>
-              </div>
-            )}
+  {hasCopiloto && (
+    <div className="assign-torreta-card">
+      <div className="assign-torreta-name">Co-piloto</div>
+      <div className="assign-torreta-caps">Controles · Navegação</div>
+      <div className={`assign-torreta-ocupante ${assignments.copiloto ? "filled" : "empty"}`}>
+        {assignments.copiloto || "—"}
+      </div>
+    </div>
+  )}
 
-            {TORRETAS.map((torreta) => {
-              const ocupante = assignments.torretas[torreta.id];
-              return (
-                <div key={torreta.id} className="assign-torreta-card">
-                  <div className="assign-torreta-name">
-                    {!hasCopiloto && torreta.id === "centro" ? "Co-piloto / Artilheiro" : torreta.label}
-                  </div>
-                  <div className="assign-torreta-caps">{torreta.capabilities.join(" · ")}</div>
-                  <div className={`assign-torreta-ocupante ${ocupante ? "filled" : "empty"}`}>
-                    {ocupante || "—"}
-                  </div>
-                </div>
-              );
-            })}
+  {TORRETAS.map((torreta) => {
+    const ocupante = assignments.torretas[torreta.id];
+    
+    // Puxa os dados dinâmicos da nave para checar avarias
+    const shipGlobal = getShipData(shipId); 
+    const memberData = shipGlobal?.activeCrew?.find(m => 
+      m.function === `TORRETA ${torreta.id.toUpperCase()}`
+    );
+
+    const status = memberData?.moduleStatus || 'operacional';
+    const turnos = memberData?.turnosParaReparo || 0;
+
+    return (
+      <div key={torreta.id} className={`assign-torreta-card status-${status}`}>
+        <div className="assign-torreta-header" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+          <div className="assign-torreta-name" style={{ fontSize: '0.7rem', fontWeight: '700', color: '#ffffff', textTransform: 'uppercase' }}>
+            {torreta.label}
           </div>
+          
+          {/* Bolinhas roxas ao lado do nome */}
+          <div className="assign-status-dots" style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
+            {status === "avariada" && Array.from({ length: turnos }).map((_, i) => (
+              <span key={i} className="status-dot purple" style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#b026ff', boxShadow: '0 0 5px #b026ff' }}></span>
+            ))}
+          </div>
+
+          {/* Botão de Reparo Exclusivo para o Piloto */}
+          {isPilot && status === "avariada" && (
+            <button 
+              onClick={() => {
+                const requests = JSON.parse(localStorage.getItem("repair_requests") || "[]");
+                const newRequest = {
+                  id: Date.now(),
+                  shipName: shipInfo.name,
+                  shipId: shipId,
+                  module: torreta.label,
+                  moduleId: memberData.id,
+                  pilot: currentPlayer.nickname
+                };
+                localStorage.setItem("repair_requests", JSON.stringify([...requests, newRequest]));
+                alert("Solicitação de reparo enviada ao comando.");
+              }}
+              style={{ 
+                fontSize: '0.5rem', padding: '1px 4px', background: 'rgba(176, 38, 255, 0.2)', 
+                border: '1px solid #b026ff', color: '#b026ff', cursor: 'pointer', borderRadius: '2px',
+                fontFamily: "'Orbitron', sans-serif", fontWeight: 'bold'
+              }}
+            >
+              REPARO
+            </button>
+          )}
+        </div>
+        
+        <div className="assign-torreta-caps" style={{ fontSize: '0.65rem', color: '#b8b8b8', marginBottom: '8px' }}>
+          {torreta.capabilities.join(" · ")}
+        </div>
+        
+        <div className={`assign-torreta-ocupante ${ocupante ? "filled" : "empty"}`} style={{ fontSize: '0.8rem', fontWeight: '700', color: ocupante ? '#98fbff' : 'rgba(200, 200, 200, 0.3)' }}>
+          {ocupante || "—"}
+        </div>
+      </div>
+    );
+  })}
+</div>
 
         </div>
 

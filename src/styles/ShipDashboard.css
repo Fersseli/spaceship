@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=JetBrains+Mono:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
 
 .dashboard {
   min-height: 100vh;
@@ -63,6 +64,7 @@
   backdrop-filter: blur(10px);
   position: relative;
   box-shadow: 0 0 30px rgba(200, 200, 200, 0.1);
+  flex-wrap: wrap;
 }
 
 .header-info h1 {
@@ -590,4 +592,554 @@
     padding: 1rem;
     border-width: 1px;
   }
+}
+
+.hit-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  pointer-events: none;
+  z-index: 9999;
+}
+
+.hit-letter {
+  font-family: 'Press Start 2P', cursive;
+  display: inline-block;
+  text-shadow: 4px 4px 0px #000;
+}
+.hit-overlay.hit .hit-letter {
+  color: #ff3c1e;
+  font-size: 3rem;
+  animation: letterDrop 3s ease-in-out forwards;
+}
+
+/* Estilo específico para FALHA (Branco e mais lento) */
+.hit-overlay.miss .hit-letter {
+  color: #ffffff;
+  font-size: 2rem; /* Um pouco menor que o dano */
+  /* Aumentamos para 5s para ser mais devagar que o acerto */
+  animation: letterDropMiss 3s ease-out forwards; 
+}
+
+@keyframes letterDrop {
+  0% {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+  10% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  80% {
+    transform: translateY(10px);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(50px);
+    opacity: 0;
+  }
+}
+
+@keyframes letterDropMiss {
+  0% {
+    transform: translateY(-10px);
+    opacity: 0;
+  }
+  20% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  80% {
+    transform: translateY(10px); /* Começa a descer junto com a opacidade */
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(50px); /* Aumentado de 20px para 50px para cair igual ao acerto */
+    opacity: 0;
+  }
+}
+
+.sd-header-log {
+  flex-basis: 100%;
+  width: 100%;
+  /* Reduzimos de 15px para 5px para aproximar da linha */
+  margin-top: 5px; 
+  /* Reduzimos o padding vertical para 5px */
+  padding: 5px 10px; 
+  background: rgba(255, 255, 255, 0.05);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  color: #ffffff;
+  white-space: normal;
+  word-break: break-word;
+  /* Remove o espaço extra que o padding do header pai cria embaixo */
+  margin-bottom: -1.5rem; 
+  animation: fadeIn 0.5s ease-out;
+}
+
+/* MODAL DE ARMAS - SISTEMA FUTURÍSTICO */
+.assign-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10000;
+  backdrop-filter: blur(5px);
+}
+
+.assign-modal {
+  background: linear-gradient(135deg, rgba(15, 29, 35, 0.98) 0%, rgba(25, 40, 50, 0.95) 100%);
+  border: 2px solid #ff4a4a;
+  box-shadow: 
+    0 0 40px rgba(255, 74, 74, 0.4),
+    inset 0 0 20px rgba(255, 74, 74, 0.1),
+    0 0 60px rgba(255, 74, 74, 0.2);
+  border-radius: 2px;
+  overflow: hidden;
+  backdrop-filter: blur(10px);
+  animation: modalSlideIn 0.4s ease-out;
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.assign-header {
+  background: linear-gradient(90deg, rgba(255, 74, 74, 0.2) 0%, rgba(255, 74, 74, 0.1) 100%);
+  padding: 1.5rem;
+  border-bottom: 2px solid #ff4a4a;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: relative;
+}
+
+.assign-header::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #ff4a4a, transparent);
+}
+
+.assign-title {
+  font-size: 1.4rem;
+  font-weight: 900;
+  color: #ff4a4a;
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 3px;
+  text-shadow: 0 0 15px rgba(255, 74, 74, 0.6);
+  font-family: 'Orbitron', sans-serif;
+}
+
+.assign-close {
+  background: transparent;
+  border: 2px solid #ff4a4a;
+  color: #ff4a4a;
+  width: 2.5rem;
+  height: 2.5rem;
+  font-size: 1.8rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  font-weight: bold;
+}
+
+.assign-close:hover {
+  background: #ff4a4a;
+  color: #000000;
+  box-shadow: 0 0 20px rgba(255, 74, 74, 0.8);
+  transform: scale(1.1);
+}
+
+.assign-close:active {
+  transform: scale(0.95);
+}
+
+.assign-body {
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* SELETOR DE ARMA */
+.weapon-selector {
+  display: flex;
+  gap: 10px;
+}
+
+.weapon-selector button {
+  flex: 1;
+  padding: 0.9rem;
+  font-family: 'Orbitron', sans-serif;
+  font-weight: bold;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  background: transparent;
+  color: #ff4a4a;
+  border: 2px solid #ff4a4a;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.weapon-selector button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: #ff4a4a;
+  z-index: -1;
+  transition: left 0.3s ease;
+}
+
+.weapon-selector button:hover::before {
+  left: 0;
+}
+
+.weapon-selector button:hover {
+  color: #000000;
+  box-shadow: 0 0 20px rgba(255, 74, 74, 0.6);
+}
+
+.weapon-selector button.active {
+  background: #ff4a4a;
+  color: #000000;
+  box-shadow: 
+    0 0 25px rgba(255, 74, 74, 0.8),
+    inset 0 0 10px rgba(0, 0, 0, 0.3);
+}
+
+/* DAMAGE DISPLAY */
+.damage-display {
+  background: linear-gradient(135deg, rgba(255, 74, 74, 0.15) 0%, rgba(255, 74, 74, 0.08) 100%);
+  border: 2px solid #ff4a4a;
+  padding: 1.2rem;
+  color: #ffffff;
+  font-family: 'JetBrains Mono', monospace;
+  text-align: center;
+  font-size: 1.1rem;
+  font-weight: bold;
+  letter-spacing: 2px;
+  position: relative;
+  overflow: hidden;
+}
+
+.damage-display::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #ff4a4a, transparent);
+  animation: scanline 2s infinite;
+}
+
+@keyframes scanline {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+.damage-value {
+  color: #ff4a4a;
+  text-shadow: 0 0 10px rgba(255, 74, 74, 0.8);
+  font-weight: 900;
+}
+
+/* INPUTS E SELECTS */
+.modal-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.modal-input-label {
+  display: block;
+  color: #b8b8b8;
+  font-size: 0.8rem;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.modal-select,
+.modal-input {
+  width: 100%;
+  padding: 0.9rem;
+  background: rgba(10, 15, 20, 0.9);
+  color: #ffffff;
+  border: 2px solid rgba(255, 74, 74, 0.5);
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.9rem;
+  transition: all 0.3s ease;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.modal-select:focus,
+.modal-input:focus {
+  outline: none;
+  border-color: #ff4a4a;
+  box-shadow: 
+    0 0 15px rgba(255, 74, 74, 0.5),
+    inset 0 0 10px rgba(255, 74, 74, 0.1);
+}
+
+.modal-select option {
+  background: #0a0f14;
+  color: #ffffff;
+}
+
+/* CHECKBOX EXTREMO */
+.checkbox-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 1rem;
+  background: rgba(255, 74, 74, 0.08);
+  border: 1px solid rgba(255, 74, 74, 0.3);
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.checkbox-wrapper:hover {
+  background: rgba(255, 74, 74, 0.15);
+  border-color: rgba(255, 74, 74, 0.6);
+}
+
+.checkbox-wrapper input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: #ff4a4a;
+}
+
+.checkbox-label {
+  color: #ff4a4a;
+  font-weight: bold;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-family: 'Orbitron', sans-serif;
+  cursor: pointer;
+}
+
+/* BOTÃO CONFIRMAR */
+.confirm-attack-button {
+  margin-top: 1rem;
+  width: 100%;
+  padding: 1.1rem;
+  background: linear-gradient(135deg, #ff4a4a 0%, #ff6b6b 100%);
+  color: #000000;
+  border: 2px solid #ff4a4a;
+  font-family: 'Orbitron', sans-serif;
+  font-weight: bold;
+  font-size: 1rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 0 20px rgba(255, 74, 74, 0.4);
+}
+
+.confirm-attack-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.2);
+  transition: left 0.3s ease;
+  z-index: -1;
+}
+
+.confirm-attack-button:hover:not(:disabled)::before {
+  left: 100%;
+}
+
+.confirm-attack-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 
+    0 0 30px rgba(255, 74, 74, 0.8),
+    0 5px 15px rgba(255, 74, 74, 0.3);
+}
+
+.confirm-attack-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.confirm-attack-button:disabled {
+  background: linear-gradient(135deg, rgba(51, 51, 51, 0.8) 0%, rgba(40, 40, 40, 0.8) 100%);
+  color: #666666;
+  border-color: #555555;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Estilo para dano causado pelo jogador (Azul) */
+.hit-overlay.damage-dealt .hit-letter {
+  color: #4a9eff; /* Azul Neon Starfield */
+  font-size: 3rem;
+  text-shadow: 0 0 15px rgba(74, 158, 255, 0.6), 4px 4px 0px #000;
+  animation: letterDrop 3s ease-in-out forwards;
+}
+
+/* Garante que o dano recebido (Vermelho) continue com o estilo original */
+.hit-overlay.hit .hit-letter {
+  color: #ff3c1e;
+  font-size: 3rem;
+  animation: letterDrop 3s ease-in-out forwards;
+}
+
+/* Efeito de Tremor */
+@keyframes shake {
+  0% { transform: translate(1px, 1px) rotate(0deg); }
+  10% { transform: translate(-1px, -2px) rotate(-1deg); }
+  20% { transform: translate(-3px, 0px) rotate(1deg); }
+  30% { transform: translate(3px, 2px) rotate(0deg); }
+  40% { transform: translate(1px, -1px) rotate(1deg); }
+  50% { transform: translate(-1px, 2px) rotate(-1deg); }
+  60% { transform: translate(-3px, 1px) rotate(0deg); }
+  70% { transform: translate(3px, 1px) rotate(-1deg); }
+  80% { transform: translate(-1px, -1px) rotate(1deg); }
+  90% { transform: translate(1px, 2px) rotate(0deg); }
+  100% { transform: translate(1px, -2px) rotate(-1deg); }
+}
+
+/* Container do Overlay para suportar sub-legendas */
+.hit-overlay {
+  flex-direction: column; /* Empilha o dano e a mensagem de avaria */
+}
+
+/* Estilo para o texto de Crítico/Extremo */
+.hit-tag-heavy {
+  font-family: 'Press Start 2P', cursive;
+  font-size: 4rem; /* Maior que o dano normal */
+  color: #000000;
+  text-shadow: 0 0 10px rgba(0, 0, 0, 0.8), 4px 4px 0px #1a1a1a;
+  margin-bottom: 10px;
+  animation: shake 0.5s infinite; /* Letras tremendo */
+  text-transform: uppercase;
+}
+
+/* Sub-legenda de módulo afetado */
+.hit-module-msg {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 1.2rem;
+  font-weight: 900;
+  color: #ff3c1e;
+  text-shadow: 2px 2px 0px #000;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 5px 15px;
+  border: 1px solid #ff3c1e;
+  margin-top: 10px;
+}
+
+/* ===== ANIMAÇÕES DO HIT OVERLAY ===== */
+
+/* Estilo para o texto de Crítico/Extremo - APARECE COM O DANO */
+.hit-tag-heavy {
+  font-family: 'Press Start 2P', cursive;
+  font-size: 4rem;
+  color: #000000;
+  text-shadow: 0 0 10px rgba(0, 0, 0, 0.8), 4px 4px 0px #1a1a1a;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  /* Começa junto (0%), fica 4s visível, desaparece no 5s */
+  animation: tagTrembleAndFade 5s ease-in-out forwards;
+}
+
+/* Animação do texto EXTREMO / CRÍTICO */
+@keyframes tagTrembleAndFade {
+  0% {
+    opacity: 1;
+    transform: rotate(0deg);
+  }
+  10%, 20%, 30% {
+    transform: rotate(-2deg);
+  }
+  15%, 25%, 35% {
+    transform: rotate(2deg);
+  }
+  50% {
+    /* Começa a apagar na metade do tempo (aos 2.5s) */
+    opacity: 1;
+    transform: rotate(0deg);
+  }
+  100% {
+    /* Leva os últimos 2.5s apagando bem devagar */
+    opacity: 0;
+    transform: rotate(0deg);
+  }
+}
+
+/* Animação da sub-legenda do módulo */
+@keyframes moduleMsgFadeInOut {
+  0% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  50% {
+    /* Começa a apagar na metade do tempo (aos 2.5s) */
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  100% {
+    /* Fica transparente e desce um pouquinho mais (15px) para dar um efeito de dissipação */
+    opacity: 0;
+    transform: translateX(-50%) translateY(15px);
+  }
+}
+
+/* Legenda de módulo afetado - OVERLAY separado */
+.hit-module-msg {
+  position: fixed;
+  bottom: 30%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Orbitron', sans-serif;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #ffae00;
+  text-shadow: 3px 3px 0px #000;
+  background: rgba(10, 15, 20, 0.95);
+  padding: 12px 20px;
+  border: 2px solid #ffae00;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  z-index: 10001;
+  pointer-events: none;
+  /* Aparece junto (0%), fica 4s visível, desaparece no 5s */
+  animation: moduleMsgFadeInOut 5s ease-in-out forwards;
+  box-shadow: 0 0 20px rgba(255, 174, 0, 0.5);
 }

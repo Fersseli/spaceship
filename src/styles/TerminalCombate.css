@@ -1,0 +1,658 @@
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=JetBrains+Mono:wght@400;700&display=swap');
+
+/* ===== LAYOUT PRINCIPAL ===== */
+.terminal-combate {
+  position: fixed;
+  inset: 0;
+  background: #050a0d;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  font-family: 'Orbitron', sans-serif;
+  overflow: hidden;
+  background-image:
+    linear-gradient(rgba(255, 60, 30, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 60, 30, 0.04) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+.terminal-combate::before {
+  content: '';
+  position: fixed;
+  left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(255, 80, 40, 0.6), transparent);
+  animation: scanline 4s linear infinite;
+  z-index: 1;
+  pointer-events: none;
+}
+
+@keyframes scanline {
+  0%   { top: 0; opacity: 0; }
+  5%   { opacity: 1; }
+  95%  { opacity: 1; }
+  100% { top: 100vh; opacity: 0; }
+}
+
+/* ===== CABEÇALHO ===== */
+.tc-header {
+  border-bottom: 1px solid rgba(255, 60, 30, 0.3);
+  padding: 1.2rem 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(10, 5, 3, 0.97);
+  flex-shrink: 0;
+  position: relative;
+}
+.tc-header::after {
+  content: '';
+  position: absolute;
+  bottom: -1px; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 80, 40, 0.8), transparent);
+}
+
+.tc-header-left  { display: flex; align-items: center; gap: 1.5rem; }
+.tc-header-right { display: flex; align-items: center; gap: 2rem; }
+
+.tc-alert-dot {
+  width: 10px; height: 10px;
+  background: #ff3c1e;
+  border-radius: 50%;
+  box-shadow: 0 0 12px #ff3c1e, 0 0 24px rgba(255, 60, 30, 0.4);
+  animation: pulse-red 1.2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes pulse-red {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.8); }
+}
+
+.tc-eyebrow {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem;
+  color: rgba(255, 80, 40, 0.6);
+  letter-spacing: 4px; text-transform: uppercase; margin-bottom: 0.2rem;
+}
+.tc-title {
+  font-size: 1.3rem; font-weight: 900;
+  color: #fff; letter-spacing: 3px; text-transform: uppercase;
+  margin: 0; line-height: 1;
+}
+.tc-title span { color: #ff5028; }
+
+.tc-stat { text-align: right; }
+.tc-stat-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem; color: rgba(255,255,255,0.35);
+  letter-spacing: 2px; text-transform: uppercase; display: block;
+}
+.tc-stat-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1rem; font-weight: 700; color: #ff5028;
+}
+
+.tc-back-btn {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.2);
+  color: rgba(255,255,255,0.6);
+  padding: 0.5rem 1.2rem;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.65rem; letter-spacing: 2px;
+  cursor: pointer; transition: all 0.2s; text-transform: uppercase;
+}
+.tc-back-btn:hover { border-color: #fff; color: #fff; background: rgba(255,255,255,0.05); }
+
+/* ===== STATUS BAR ===== */
+.tc-statusbar {
+  padding: 0.5rem 2.5rem;
+  background: rgba(255, 60, 30, 0.06);
+  border-bottom: 1px solid rgba(255, 60, 30, 0.12);
+  display: flex; gap: 2rem; flex-shrink: 0; flex-wrap: wrap;
+}
+.tc-statusbar-item {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem; color: rgba(255,255,255,0.3);
+  letter-spacing: 2px; text-transform: uppercase;
+}
+.tc-statusbar-item.active { color: rgba(255, 80, 40, 0.7); }
+.tc-statusbar-item::before { content: '// '; color: rgba(255, 60, 30, 0.3); }
+
+/* ===== LAYOUT PRINCIPAL ===== */
+.tc-layout {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ===== COLUNA DE CARDS ===== */
+.tc-body {
+  overflow-y: auto;
+  padding: 1.5rem 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.tc-empty {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 1rem; color: rgba(255,255,255,0.15);
+}
+.tc-empty-icon { font-size: 3rem; opacity: 0.2; }
+.tc-empty-text {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem; letter-spacing: 3px; text-transform: uppercase;
+}
+
+/* ===== CARD TÁTICO ===== */
+.tc-card {
+  border: 1px solid rgba(255, 60, 30, 0.25);
+  background: rgba(12, 5, 3, 0.92);
+  position: relative;
+  /* SEM overflow:hidden — permite que os slots cresçam livremente */
+  transition: border-color 0.2s;
+}
+.tc-card:hover { border-color: rgba(255, 80, 40, 0.5); }
+.tc-card::before {
+  content: '';
+  position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: linear-gradient(180deg, #ff3c1e, rgba(255,60,30,0.3));
+}
+.tc-card::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(135deg, rgba(255,60,30,0.04) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+.tc-card-header {
+  padding: 1rem 1.5rem 1rem 1.8rem;
+  border-bottom: 1px solid rgba(255, 60, 30, 0.15);
+  display: flex; justify-content: space-between; align-items: center; gap: 1rem;
+  background: rgba(255, 30, 10, 0.04);
+}
+.tc-card-header-left  { display: flex; align-items: center; gap: 1rem; }
+.tc-card-header-right { display: flex; align-items: center; gap: 1rem; flex-shrink: 0; }
+
+.tc-card-class-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.55rem; color: #ff5028;
+  background: rgba(255, 60, 30, 0.12);
+  border: 1px solid rgba(255, 60, 30, 0.3);
+  padding: 2px 6px; letter-spacing: 2px; text-transform: uppercase;
+  white-space: nowrap;
+}
+.tc-card-ship-name {
+  font-size: 1.05rem; font-weight: 900;
+  color: #fff; letter-spacing: 2px; text-transform: uppercase;
+}
+
+.tc-hp-block { text-align: right; }
+.tc-hp-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.55rem; color: rgba(255,255,255,0.3);
+  letter-spacing: 2px; text-transform: uppercase; display: block; margin-bottom: 0.2rem;
+}
+.tc-hp-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.95rem; font-weight: 700; color: #ff5028;
+}
+.tc-hp-bar-wrap {
+  width: 80px; height: 6px;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,60,30,0.2);
+  overflow: hidden;
+}
+.tc-hp-bar-fill {
+  height: 100%; transition: width 0.4s ease;
+}
+.tc-hp-bar-fill.healthy { background: linear-gradient(90deg, #2aff8c, #50ffaa); box-shadow: 0 0 8px rgba(42,255,140,0.5); }
+.tc-hp-bar-fill.damaged  { background: linear-gradient(90deg, #ffaa20, #ffd060); box-shadow: 0 0 8px rgba(255,180,40,0.5); }
+.tc-hp-bar-fill.critical { background: linear-gradient(90deg, #ff3c1e, #ff6040); box-shadow: 0 0 8px rgba(255,60,30,0.7); }
+
+/* ===== GRID DE TRIPULANTES — LINHA HORIZONTAL, SEM CORTE ===== */
+.tc-card-body {
+  padding: 1rem 1.5rem 1.2rem 1.8rem;
+  /* Grid com colunas que encolhem mas nunca cortam — usa wrap natural */
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.tc-no-crew {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem; color: rgba(255,255,255,0.2); letter-spacing: 2px;
+}
+
+/* ===== SLOT DE TRIPULANTE ===== */
+.tc-crew-slot {
+  /* Largura mínima + cresce para preencher, mas quebra linha se não couber */
+  flex: 1 1 180px;
+  max-width: 260px;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid rgba(255,255,255,0.07);
+  padding: 0.7rem 0.9rem;
+  position: relative;
+  transition: border-color 0.15s;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  /* Cresce em altura conforme o conteúdo — sem overflow oculto */
+}
+.tc-crew-slot:hover        { border-color: rgba(255, 80, 40, 0.3); }
+.tc-crew-slot.is-open      { border-color: rgba(255, 80, 40, 0.5); background: rgba(255,40,10,0.06); }
+
+.tc-crew-function {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.58rem; color: rgba(255, 80, 40, 0.7);
+  letter-spacing: 2px; text-transform: uppercase;
+}
+.tc-crew-slot.is-piloto   .tc-crew-function { color: #ff5028; }
+.tc-crew-slot.is-copiloto .tc-crew-function { color: rgba(255, 180, 60, 0.85); }
+
+.tc-crew-name {
+  font-size: 0.85rem; font-weight: 700;
+  color: #fff; letter-spacing: 1px; text-transform: uppercase;
+}
+
+.tc-crew-attrs { display: flex; gap: 0.7rem; flex-wrap: wrap; }
+.tc-crew-attr  { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; }
+.tc-crew-attr-label { color: rgba(255,255,255,0.25); }
+.tc-crew-attr-value { color: #98fbff; font-weight: 700; }
+
+.tc-crew-role-dot {
+  position: absolute; top: 8px; right: 8px;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: rgba(255, 80, 40, 0.35);
+}
+.tc-crew-slot.is-piloto   .tc-crew-role-dot { background: #ff5028; box-shadow: 0 0 6px rgba(255,60,30,0.7); }
+.tc-crew-slot.is-copiloto .tc-crew-role-dot { background: #ffb030; box-shadow: 0 0 6px rgba(255,180,60,0.5); }
+
+/* ===== BOTÃO ATACAR (estado fechado) ===== */
+.tc-attack-toggle-btn {
+  margin-top: 0.4rem;
+  padding: 0.35rem 0.6rem;
+  background: transparent;
+  border: 1px solid rgba(255, 60, 30, 0.35);
+  color: rgba(255, 80, 40, 0.7);
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.58rem; font-weight: 700;
+  letter-spacing: 1.5px; text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.15s;
+  width: 100%;
+}
+.tc-attack-toggle-btn:hover {
+  border-color: #ff5028;
+  color: #ff5028;
+  background: rgba(255, 40, 10, 0.08);
+}
+
+/* ===== PAINEL DE ATAQUE EXPANDIDO ===== */
+.tc-fire-controls {
+  display: flex; flex-direction: column; gap: 0.4rem;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(255, 60, 30, 0.15);
+}
+
+.tc-target-select {
+  background: rgba(5, 2, 2, 0.95);
+  border: 1px solid rgba(255, 60, 30, 0.35);
+  color: #bbb;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.63rem; letter-spacing: 0.5px;
+  padding: 0.35rem 0.5rem;
+  width: 100%; cursor: pointer;
+  text-transform: uppercase;
+}
+.tc-target-select:focus {
+  outline: none; border-color: rgba(255, 80, 40, 0.7); color: #fff;
+}
+.tc-target-select option { background: #0a0505; color: #ccc; }
+
+/* Linha com botão cancelar + disparar */
+.tc-fire-row {
+  display: flex; gap: 0.4rem;
+}
+
+.tc-cancel-btn {
+  flex-shrink: 0;
+  width: 32px;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.3);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.tc-cancel-btn:hover {
+  border-color: rgba(255,255,255,0.5);
+  color: rgba(255,255,255,0.7);
+}
+
+.tc-fire-btn {
+  flex: 1;
+  background: rgba(255, 40, 10, 0.12);
+  border: 1px solid rgba(255, 60, 30, 0.5);
+  color: #ff6040;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.6rem; font-weight: 700;
+  letter-spacing: 1.5px; text-transform: uppercase;
+  padding: 0.4rem;
+  cursor: pointer; transition: all 0.15s;
+}
+.tc-fire-btn:hover:not(:disabled) {
+  background: rgba(255, 60, 30, 0.25);
+  border-color: #ff5028; color: #fff;
+  box-shadow: 0 0 12px rgba(255, 60, 30, 0.3);
+}
+.tc-fire-btn:disabled { opacity: 0.25; cursor: not-allowed; }
+
+/* ===== LOG DE COMBATE ===== */
+.tc-log {
+  border-left: 1px solid rgba(255, 60, 30, 0.2);
+  background: rgba(8, 3, 2, 0.97);
+  display: flex; flex-direction: column;
+  overflow-y: auto;
+}
+
+.tc-log-title {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem; color: rgba(255, 80, 40, 0.6);
+  letter-spacing: 3px; text-transform: uppercase;
+  padding: 0.8rem 1rem;
+  border-bottom: 1px solid rgba(255, 60, 30, 0.15);
+  flex-shrink: 0;
+  position: sticky; top: 0;
+  background: rgba(8, 3, 2, 0.97);
+  z-index: 1;
+}
+
+.tc-log-empty {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem; color: rgba(255,255,255,0.15);
+  letter-spacing: 2px; text-transform: uppercase;
+  padding: 1.5rem 1rem;
+}
+
+.tc-log-entry {
+  padding: 0.7rem 1rem;
+  border-left: 3px solid rgba(255,255,255,0.08);
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.63rem; line-height: 1.65;
+  word-break: break-word;
+}
+.tc-log-entry.hit  { border-left-color: #ff5028; background: rgba(255, 60, 30, 0.04); }
+.tc-log-entry.miss { border-left-color: rgba(255,255,255,0.12); }
+
+.tc-log-time {
+  display: block;
+  color: rgba(255, 80, 40, 0.45);
+  font-size: 0.58rem; margin-bottom: 0.25rem; letter-spacing: 1px;
+}
+.tc-log-text { color: rgba(255,255,255,0.65); }
+.tc-log-entry.hit  .tc-log-text { color: rgba(255, 200, 180, 0.9); }
+.tc-log-entry.miss .tc-log-text { color: rgba(255,255,255,0.3); }
+
+/* ===== RODAPÉ ===== */
+.tc-footer {
+  padding: 0.6rem 2.5rem;
+  border-top: 1px solid rgba(255, 60, 30, 0.1);
+  display: flex; justify-content: space-between; align-items: center;
+  flex-shrink: 0; background: rgba(10, 5, 3, 0.97);
+}
+.tc-footer-text {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem; color: rgba(255,255,255,0.15);
+  letter-spacing: 2px; text-transform: uppercase;
+}
+.tc-footer-text span { color: rgba(255, 80, 40, 0.5); }
+
+/* ===== SCROLLBARS ===== */
+.tc-body::-webkit-scrollbar,
+.tc-log::-webkit-scrollbar  { width: 5px; }
+.tc-body::-webkit-scrollbar-track,
+.tc-log::-webkit-scrollbar-track  { background: transparent; }
+.tc-body::-webkit-scrollbar-thumb,
+.tc-log::-webkit-scrollbar-thumb  { background: rgba(255, 60, 30, 0.3); border-radius: 3px; }
+.tc-body::-webkit-scrollbar-thumb:hover,
+.tc-log::-webkit-scrollbar-thumb:hover { background: rgba(255, 60, 30, 0.6); }
+
+/* ===== RESPONSIVO ===== */
+@media (max-width: 900px) {
+  .tc-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 280px;
+  }
+  .tc-log { border-left: none; border-top: 1px solid rgba(255,60,30,0.2); }
+}
+@media (max-width: 600px) {
+  .tc-header    { padding: 1rem; flex-wrap: wrap; gap: 0.8rem; }
+  .tc-body      { padding: 1rem; }
+  .tc-title     { font-size: 1rem; }
+  .tc-crew-slot { flex: 1 1 100%; max-width: 100%; }
+}
+
+.tc-attr-adjuster {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  margin-bottom: 10px;
+  border-radius: 4px;
+}
+.tc-attr-mini-control {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+}
+.tc-attr-mini-control button {
+  background: #ff5028;
+  border: none;
+  color: white;
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  font-weight: bold;
+}
+.tc-attr-val {
+  color: #98fbff;
+  min-width: 15px;
+  text-align: center;
+}
+
+/* Container horizontal compacto */
+.tc-attr-compact-row {
+  display: flex;
+  gap: 6px;
+  padding: 6px 8px;
+  background: rgba(255, 60, 30, 0.04);
+  border-bottom: 1px solid rgba(255, 60, 30, 0.12);
+
+  /* REMOVE o hack que estava quebrando layout */
+  margin: 0;
+
+  /* impede crescimento exagerado */
+  flex-wrap: nowrap;
+  overflow-x: auto;
+}
+
+.tc-mini-ctrl {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+  min-width: 36px;
+  padding: 4px 2px;
+
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tc-mini-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.55rem;
+  color: rgba(255, 255, 255, 0.4);
+  margin-top: 2px;
+}
+
+.tc-mini-btns {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.tc-mini-btns button {
+  width: 16px;
+  height: 16px;
+  font-size: 0.6rem;
+
+  background: rgba(255, 60, 30, 0.2);
+  border: 1px solid rgba(255, 60, 30, 0.4);
+  color: #fff;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tc-mini-btns button:hover {
+  background: #ff3c1e;
+  border-color: #fff;
+}
+
+.tc-mini-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  font-weight: bold;
+  color: #98fbff;
+
+  margin: 2px 0;
+}
+/* Indicadores de Módulo */
+.tc-crew-slot::before {
+  content: '';
+  position: absolute;
+  left: 8px; top: 12px;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+}
+
+.tc-crew-slot[data-status="operacional"]::before { background: #2aff8c; }
+.tc-crew-slot[data-status="avariada"]::before { 
+  background: #ffae00; 
+  animation: pulse-yellow 1s infinite;
+}
+.tc-crew-slot[data-status="destruida"]::before { background: #550000; }
+
+@keyframes pulse-yellow {
+  0% { opacity: 1; }
+  50% { opacity: 0.3; }
+  100% { opacity: 1; }
+}
+
+.tc-fire-btn:disabled {
+  background: #1a0000 !important;
+  color: #444 !important;
+  border-color: #333 !important;
+  cursor: not-allowed;
+}
+
+/* ========================================= */
+/* BOLINHAS DE AVARIA DO SISTEMA             */
+/* ========================================= */
+.tc-crew-status-dots {
+  position: absolute;
+  left: 10px;
+  top: 12px;
+  display: flex;
+  gap: 5px;
+  z-index: 2;
+}
+
+.status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.status-dot.purple {
+  background: #b026ff;
+  box-shadow: 0 0 8px #b026ff;
+  animation: pulse-purple 1.5s infinite alternate;
+}
+
+.status-dot.black {
+  background: #111;
+  border: 1px solid #333;
+  box-shadow: 0 0 4px #000 inset;
+}
+
+@keyframes pulse-purple {
+  from { opacity: 0.5; box-shadow: 0 0 4px #b026ff; }
+  to { opacity: 1; box-shadow: 0 0 12px #b026ff; }
+}
+
+/* Travar o botão visualmente quando o módulo está inoperante */
+.tc-attack-toggle-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  border-color: #555 !important;
+  color: #666 !important;
+  background: transparent !important;
+}
+
+/* ========================================= */
+/* ANIMAÇÃO DE DESTRUIÇÃO DE NAVE            */
+/* ========================================= */
+
+.tc-card.is-destroyed {
+  pointer-events: none; /* Trava cliques para não atacarem mais */
+  animation: cardShakeAndFade 4s forwards;
+}
+
+.tc-card-destroyed-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(20, 0, 0, 0.85);
+  backdrop-filter: blur(4px);
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 2.8rem;
+  color: #ff3c1e;
+  text-shadow: 0 0 20px #ff3c1e, 3px 3px 0px #000;
+  text-transform: uppercase;
+  font-weight: 900;
+  letter-spacing: 5px;
+  animation: stampIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+/* Efeito de "Carimbo" batendo na tela */
+@keyframes stampIn {
+  0% { transform: scale(2); opacity: 0; }
+  50% { opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Tremer a nave violentamente por 1s e depois fazer Fade-Out lento */
+@keyframes cardShakeAndFade {
+  0% { filter: sepia(1) hue-rotate(-50deg) saturate(5); opacity: 1; }
+  2%, 6%, 10%, 14%, 18%, 22% { transform: translate(-3px, 1px) rotate(-1deg); }
+  4%, 8%, 12%, 16%, 20%, 24% { transform: translate(3px, -1px) rotate(1deg); }
+  26% { transform: translate(0, 0) rotate(0); filter: sepia(1) hue-rotate(-50deg) saturate(5); opacity: 1; }
+  75% { opacity: 1; filter: grayscale(1); }
+  100% { opacity: 0; transform: scale(0.95); filter: grayscale(1); }
+}

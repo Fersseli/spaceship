@@ -6,20 +6,34 @@ import ShipRadarChart from "./ShipRadarChart";
 import AssignCrew from "./AssignCrew";
 import { removePlayerFromAllCrews } from "../utils/mockApi"; // Adicione o import para a função de limpeza de tripulação
 import DexterityRanking from "./Destreza"; // <-- NOVO IMPORT
-import { getShipData, updateShipAttributes } from "../utils/mockApi";
-
+import { getShipData, updateShipAttributes, getAllShips, processPlayerAttack } from "../utils/mockApi";
 
 
 // Painel principal da nave com interface Starfield
 const ShipDashboard = ({ playerData, onLogout }) => {
 
-    const [showAssignCrew, setShowAssignCrew] = useState(false);
-  const [showDexterityModal, setShowDexterityModal] = useState(false);
+// Localize onde estão os outros estados de ataque (por volta da linha 20)
+const [attackWeaponType, setAttackWeaponType] = useState("weapons"); // "weapons" ou "missiles"
+  const [hitEvent, setHitEvent] = useState(null);
+const [headerLog, setHeaderLog] = useState("");
+const [showAssignCrew, setShowAssignCrew] = useState(false);
+const [showDexterityModal, setShowDexterityModal] = useState(false);
+const [shipDataState, setShipDataState] = useState(getShipData(playerData.ship));
+// Novos estados para o Sistema de Combate
+const [showAttackModal, setShowAttackModal] = useState(false);
+const [attackTarget, setAttackTarget] = useState("");
+const [isExtremo, setIsExtremo] = useState(false);
+const [attackDamage, setAttackDamage] = useState("");
+const [allShipsList, setAllShipsList] = useState([]);
+const [combatJournal, setCombatJournal] = useState([]); // <--- ADICIONE ESTA LINHA
 
 // --- NOVO: Referências de áudio e do timer ---
 const rechargeSound = useRef(new Audio('/recharge.mp3'));
-const powerDownGeneric = useRef(new Audio('/outage1.mp3')); // Som para reduções normais
-const powerDownOutage = useRef(new Audio('/outage.mp3'));   // Som para quando chega a zero
+const powerDownGeneric = useRef(new Audio('/outage1.mp3')); 
+const powerDownOutage = useRef(new Audio('/outage.mp3'));   
+const hitSound = useRef(new Audio('/hit.mp3'));             // <-- NOVO: Dano normal
+const critSound = useRef(new Audio('/magic_crumple2.ogg')); // <-- NOVO: Crítico/Extremo
+const shieldSound = useRef(new Audio('/shield.mp3')); // <--- ADICIONE ESTA LINHA
 const soundTimeout = useRef(null);
 
 
@@ -64,8 +78,37 @@ const soundTimeout = useRef(null);
       rechargeSound.current.playbackRate = 1.0; // Reseta a velocidade pro padrão
     }, desiredDurationMs); 
   };
+// src/components/ShipDashboard.jsx - Ajuste no useEffect de monitoramento
 
-   // src/components/ShipDashboard.jsx
+useEffect(() => {
+  setAllShipsList(Object.values(getAllShips()));
+
+  // Carrega o log inicial
+  const initialLog = JSON.parse(localStorage.getItem("combat_journal") || "[]");
+  setCombatJournal(initialLog);
+
+  const handleStorageChange = (e) => {
+    if (e.key === "heavens_door_ships_db") {
+      if (e.newValue) {
+        const allShips = JSON.parse(e.newValue);
+        setAllShipsList(Object.values(allShips));
+        const updatedShip = allShips[playerData.ship];
+        if (updatedShip) {
+          // Atualiza atributos E também o HP atual
+          setAttributes(updatedShip.attributes);
+          // O shipInfo usado no render virá do getShipData atualizado no próximo ciclo
+          // mas para garantir atualização imediata da UI de HP:
+          setShipDataState(updatedShip); 
+        }
+      }
+    }
+    if (e.key === "combat_journal" && e.newValue) {
+      setCombatJournal(JSON.parse(e.newValue));
+    }
+  };
+  window.addEventListener('storage', handleStorageChange);
+  return () => window.removeEventListener('storage', handleStorageChange);
+}, [playerData.ship]);
 
 useEffect(() => {
     document.body.style.cursor = "url('/normal.cur'), auto";
@@ -85,6 +128,109 @@ useEffect(() => {
         removePlayerFromAllCrews(playerData.nickname);
     };
 }, [playerData]);
+
+useEffect(() => {
+  const handler = (e) => {
+    const data = e.detail;
+    let overlayText = "";
+    let overlayType = "hit";
+    let extraTag = ""; // "CRÍTICO" ou "EXTREMO"
+    let moduleMsg = ""; // Mensagem de avaria
+
+    // Tenta extrair avaria do logText enviado pelo TerminalCombate/Mestre
+// CÓDIGO NOVO:
+    if (data.logText) {
+      // Procura formato do Mestre
+      if (data.logText.includes("[MÓDULO:")) {
+        const match = data.logText.match(/\[MÓDULO: (.*?)\]/);
+        if (match) moduleMsg = match[1];
+      } 
+      // Procura formato do Jogador (Avaria)
+      else if (data.logText.includes("[AVARIA:")) {
+        const match = data.logText.match(/\[AVARIA: (.*?)\]/);
+        if (match) moduleMsg = `${match[1]} AVARIADA`;
+      } 
+      // Procura formato do Jogador (Destruição)
+      else if (data.logText.includes("[MÓDULO DESTRUÍDO:")) {
+        const match = data.logText.match(/\[MÓDULO DESTRUÍDO: (.*?)\]/);
+        if (match) moduleMsg = `${match[1]} DESTRUÍDA`;
+      }
+      
+      if (data.logText.includes("EXTREMO")) extraTag = "extremo.";
+      else if (data.logText.includes("CRÍTICO")) extraTag = "crítico.";
+    }
+
+    if (data.isRepair) {
+      overlayText = "REPARO";
+      overlayType = "miss";
+    } else if (data.isAbsorbed) {
+      overlayText = "ABSORVIDO";
+      overlayType = "miss";
+    } else if (data.damage > 0) {
+      overlayText = `-${data.damage} HP`;
+      overlayType = data.isPlayerAction ? "damage-dealt" : "hit";
+    } else {
+      overlayText = "FALHOU!";
+      overlayType = "miss";
+    }
+
+    setHitEvent({
+      text: overlayText,
+      type: overlayType,
+      extraTag: extraTag, // Nova propriedade
+      moduleMsg: moduleMsg, // Nova propriedade
+      id: data.timestamp || Date.now()
+    });
+
+    setHeaderLog(data.logText);
+    setTimeout(() => setHitEvent(null), 4000);
+  };
+
+  window.addEventListener("combat:event", handler);
+  return () => window.removeEventListener("combat:event", handler);
+}, []);
+
+// --- NOVO: EFEITO SONORO DE DANO ---
+useEffect(() => {
+  if (hitEvent) {
+    // Filtramos para tocar som apenas se for um acerto com dano
+    if (hitEvent.type === "hit" || hitEvent.type === "damage-dealt") {
+      
+      if (hitEvent.extraTag) {
+        // Se houver a tag de EXTREMO ou CRÍTICO, toca o som especial
+        if (critSound.current) {
+          critSound.current.currentTime = 0;
+          critSound.current.volume = 1.0;
+          critSound.current.play().catch(e => console.warn("Áudio bloqueado:", e));
+        }
+      } else {
+        // Caso contrário, toca o som de dano normal
+        if (hitSound.current) {
+          hitSound.current.currentTime = 0;
+          hitSound.current.volume = 1.0;
+          hitSound.current.play().catch(e => console.warn("Áudio bloqueado:", e));
+        }
+      }
+      
+    }
+  // 2. Lógica para ABSORVIDO (Escudo)
+    else if (hitEvent.text === "ABSORVIDO" || hitEvent.text === "absorvido!") {
+      if (shieldSound.current) {
+        shieldSound.current.currentTime = 0;
+        shieldSound.current.volume = 1.0;
+        shieldSound.current.play().catch(e => console.warn("Erro áudio:", e));
+
+        // Corta o som após 1 segundo (1000ms)
+        setTimeout(() => {
+          if (shieldSound.current) {
+            shieldSound.current.pause();
+          }
+        }, 1200);
+      }
+    }
+  }
+}, [hitEvent]);
+
 
   // Obtém informações da nave do banco de dados
 // 1. Puxa as informações VIVAS da nave do nosso "banco de dados"
@@ -124,22 +270,75 @@ const playPowerDownSound = (isOutage = false) => {
 const [currentRole, setCurrentRole] = useState(playerData.role);
 
   // EFEITO: Ouvir mudanças feitas por outras abas em tempo real
-  useEffect(() => {
+// ... linha anterior: useEffect(() => {
+// ... linha anterior: const [currentRole, setCurrentRole] = useState(playerData.role);
+
+useEffect(() => {
     const handleStorageChange = (e) => {
-      // Agora ouvimos a chave mestra do banco de dados
-      if (e.key === "heavens_door_ships_db") {
-        if (e.newValue) {
-          const allShips = JSON.parse(e.newValue);
-          const updatedShip = allShips[playerData.ship];
-          if (updatedShip) {
-            setAttributes(updatedShip.attributes);
+      if (e.key === "last_combat_event" && e.newValue) {
+        const data = JSON.parse(e.newValue);
+        let overlayText = "", overlayType = "hit";
+        let extraTag = "";      // ← ADICIONE ESTA LINHA
+        let moduleMsg = "";     // ← ADICIONE ESTA LINHA
+
+        // Adicionamos a checagem de Reparo AQUI também:
+        if (data.isRepair) {
+          overlayText = "REPARO";
+          overlayType = "miss";
+        } else if (data.isAbsorbed) {
+          overlayText = "absorvido!";
+          overlayType = "miss";
+        } else if (data.damage > 0) {
+          overlayText = `-${data.damage} HP`;
+          overlayType = "hit";
+          
+          // ← ADICIONE ESTA SEÇÃO AQUI
+          // CÓDIGO NOVO:
+          if (data.logText) {
+            if (data.logText.includes("[MÓDULO:")) {
+              const match = data.logText.match(/\[MÓDULO: (.*?)\]/);
+              if (match) moduleMsg = match[1];
+            } else if (data.logText.includes("[AVARIA:")) {
+              const match = data.logText.match(/\[AVARIA: (.*?)\]/);
+              if (match) moduleMsg = `${match[1]} AVARIADA`;
+            } else if (data.logText.includes("[MÓDULO DESTRUÍDO:")) {
+              const match = data.logText.match(/\[MÓDULO DESTRUÍDO: (.*?)\]/);
+              if (match) moduleMsg = `${match[1]} DESTRUÍDA`;
+            }
+            
+            if (data.logText.includes("EXTREMO")) extraTag = "EXTREMO.";
+            else if (data.logText.includes("CRÍTICO")) extraTag = "CRÍTICO.";
           }
+          
+        } else {
+          overlayText = "falhou!";
+          overlayType = "miss";
         }
+
+        setHitEvent({ 
+          text: overlayText, 
+          type: overlayType, 
+          id: data.timestamp,
+          extraTag: extraTag,      // ← ADICIONE
+          moduleMsg: moduleMsg      // ← ADICIONE
+        });
+        setHeaderLog(data.logText);
+        setTimeout(() => setHitEvent(null), 4000);
+      }
+      
+      if (e.key === "heavens_door_ships_db" && e.newValue) {
+        const allShips = JSON.parse(e.newValue);
+        setAllShipsList(Object.values(allShips));
+        const updatedShip = allShips[playerData.ship];
+        if (updatedShip) setAttributes(updatedShip.attributes);
       }
     };
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
   }, [playerData.ship]);
+
+  // EFEITO: Checar cargo
+// ... linha posterior: useEffect(() => {
 
   // EFEITO: Checar cargo
   useEffect(() => {
@@ -204,6 +403,52 @@ const [currentRole, setCurrentRole] = useState(playerData.role);
       [attributeName]: attributes[attributeName] - 1
     });
   };
+
+  // Localização: src/components/ShipDashboard.jsx
+// Abaixo de handleManualSync ou handleDecrement
+
+// Localize esta função por volta da linha 250 do ShipDashboard.jsx
+const handleConfirmAttack = () => {
+  if (!attackTarget) return;
+  
+  const currentWeaponEffect = getEffect(
+    shipInfo.shipClass, 
+    attackWeaponType, 
+    attributes[attackWeaponType]
+  );
+  
+  // Chamada original da API
+  processPlayerAttack(
+    playerData.ship, 
+    attackTarget, 
+    attackDamage, 
+    isExtremo, 
+    currentWeaponEffect
+  );
+
+  // --- CORREÇÃO AQUI ---
+  // Se for extremo, precisamos simular um valor > 0 para o overlay não dizer "falhou"
+  // Podemos calcular o dano real ou apenas passar um valor simbólico, 
+  // já que o processPlayerAttack cuidará do banco de dados.
+//const visualDamage = isExtremo ? 999 : parseInt(attackDamage || 0);
+/*
+  const localFeedback = {
+    targetName: attackTarget,
+    damage: visualDamage, 
+    isAbsorbed: false,
+    isPlayerAction: true, 
+    isExtremo: isExtremo, // Passamos a flag para o visual também
+    timestamp: Date.now(),
+    logText: isExtremo ? "DISPARO EXTREMO CONFIRMADO!" : "Disparo confirmado..." 
+  };*/
+
+  //window.dispatchEvent(new CustomEvent("combat:event", { detail: localFeedback }));
+
+  setShowAttackModal(false);
+  setAttackTarget("");
+  setAttackDamage("");
+  setIsExtremo(false);
+};
 
   // Gera a visualização das barras de ativação
  const renderBars = (attributeName, currentLevel) => {
@@ -281,6 +526,19 @@ const [currentRole, setCurrentRole] = useState(playerData.role);
     </div>
 <p>COMANDANTE: {playerData.nickname.toUpperCase()} | FUNÇÃO: {currentRole.toUpperCase()}</p>  </div>
   <div className="logout-button-container">
+    {currentRole === "piloto" && (
+    <>
+      <span className="logout-text">ATACAR</span>
+      <button
+        onClick={() => setShowAttackModal(true)}
+        className="logout-button"
+        title="Sistemas de Armas"
+        style={{ fontSize: "0.6rem", letterSpacing: "1px", width: "auto", padding: "0 0.75rem", borderColor: '#ff4a4a', color: '#ff4a4a' }}
+      >
+        LT
+      </button>
+    </>
+  )}
     <span className="logout-text">TRIPULACAO</span>
     {playerData.role === "piloto" || true ? (
       <button
@@ -309,6 +567,9 @@ const [currentRole, setCurrentRole] = useState(playerData.role);
       B
     </button>
   </div>
+  <div className="sd-header-log">
+  {headerLog}
+</div>
 </header>
 
         {/* Main Content */}
@@ -444,6 +705,7 @@ const [currentRole, setCurrentRole] = useState(playerData.role);
               <div className="radar-container" style={{ height: "250px", marginTop: "20px" }}>
                 <ShipRadarChart attributes={attributes} />
               </div>
+            
 
             </div>
 
@@ -466,8 +728,125 @@ const [currentRole, setCurrentRole] = useState(playerData.role);
       {showDexterityModal && (
         <DexterityRanking onClose={() => setShowDexterityModal(false)} />
       )}
+
+     {/* Exibição do Hit Event que já estava aí */}
+      {hitEvent && (
+  <>
+    {/* OVERLAY principal com dano e EXTREMO */}
+    <div key={hitEvent.id} className={`hit-overlay ${hitEvent.type}`}>
+      {/* Texto de impacto (EXTREMO ou CRÍTICO) - APARECE COM O DANO */}
+      {hitEvent.extraTag && (
+        <div className="hit-tag-heavy">
+          {hitEvent.extraTag}
+        </div>
+      )}
+
+      {/* Dano normal */}
+      <div className="hit-damage-row">
+        {hitEvent.text.split("").map((char, i) => (
+          <span
+            key={i}
+            className="hit-letter"
+            style={{ animationDelay: `${i * 0.03}s` }}
+          >
+            {char}
+          </span>
+        ))}
+      </div>
+    </div>
+
+    {/* OVERLAY SEPARADO para a legenda do módulo */}
+    {hitEvent.moduleMsg && (
+      <div className="hit-module-msg">
+        {hitEvent.moduleMsg}
+      </div>
+    )}
+  </>
+)}
+
+      {showAttackModal && (
+  <div className="assign-overlay" onClick={() => setShowAttackModal(false)}>
+    <div className="assign-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '450px' }}>
+      <div className="assign-header">
+        <h2 className="assign-title">SISTEMA DE ARMAS</h2>
+        <button className="assign-close" onClick={() => setShowAttackModal(false)}>×</button>
+      </div>
+      
+      <div className="assign-body">
+        {/* SELETOR DE ARMA */}
+        <div className="weapon-selector">
+          <button 
+            className={attackWeaponType === "weapons" ? "active" : ""}
+            onClick={() => setAttackWeaponType("weapons")}
+          >
+            BALÍSTICO
+          </button>
+          <button 
+            className={attackWeaponType === "missiles" ? "active" : ""}
+            onClick={() => setAttackWeaponType("missiles")}
+          >
+            MÍSSIL
+          </button>
+        </div>
+
+        <div className="damage-display">
+          DANO: <span className="damage-value">{getEffect(shipInfo.shipClass, attackWeaponType, attributes[attackWeaponType])}</span>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div className="modal-input-group">
+            <label className="modal-input-label">SELECIONAR ALVO:</label>
+            <select 
+              className="modal-select"
+              value={attackTarget} 
+              onChange={(e) => setAttackTarget(e.target.value)}
+            >
+              <option value="">-- SELECIONE UM ALVO --</option>
+              {allShipsList.filter(s => s.id !== playerData.ship && s.status !== "desativada" && s.status !== "destruida").map(s => (
+                <option key={s.id} value={s.id}>
+                  {s.isEnemy ? "[HOSTIL]" : "[ALIADA]"} {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <label className="checkbox-wrapper">
+            <input 
+              type="checkbox" 
+              checked={isExtremo} 
+              onChange={(e) => setIsExtremo(e.target.checked)} 
+            />
+            <span className="checkbox-label">[+] ACERTO EXTREMO?</span>
+          </label>
+
+          {!isExtremo && (
+            <div className="modal-input-group">
+              <label className="modal-input-label">DANO ROLADO (DADO FÍSICO):</label>
+              <input 
+                type="number" 
+                className="modal-input"
+                value={attackDamage} 
+                onChange={(e) => setAttackDamage(e.target.value)}
+                placeholder="Insira o dano..."
+              />
+            </div>
+          )}
+        </div>
+
+        <button 
+          className="confirm-attack-button"
+          onClick={handleConfirmAttack}
+          disabled={!attackTarget || (!isExtremo && !attackDamage)}
+        >
+          CONFIRMAR DISPARO
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
     </div>
   );
-};
+}; // <--- FIM DO COMPONENTE SHIPDASHBOARD
 
 export default ShipDashboard;

@@ -23,6 +23,11 @@
   font-family: 'Orbitron', sans-serif;
 }
 
+.dex-cmdt {
+  font-family:  sans-serif;
+  font-size: 0.75rem;
+}
+
 .dex-header {
   display: flex;
   justify-content: space-between;
