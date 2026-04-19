@@ -203,8 +203,17 @@ export const processGlobalTurn = () => {
   let relatorio = [];
 
   Object.values(ships).forEach(ship => {
+    // --- NOVO: REDUÇÃO DE COOLDOWN DE MÍSSEIS ---
+    if (ship.missileCooldown > 0) {
+      ship.missileCooldown -= 1;
+      if (ship.missileCooldown === 0) {
+        relatorio.push(`${ship.name}: Lançadores de mísseis recarregados.`);
+      }
+    }
+
     if (ship.activeCrew) {
       ship.activeCrew.forEach(member => {
+        // Reparos normais
         if (member.moduleStatus === 'avariada' && member.turnosParaReparo > 0) {
           member.turnosParaReparo -= 1;
           if (member.turnosParaReparo === 0) {
@@ -212,11 +221,18 @@ export const processGlobalTurn = () => {
             relatorio.push(`${ship.name}: ${member.id} reparada!`);
           }
         }
+
+        // --- NOVO: PROCESSAMENTO DE MIRA DE MÍSSIL ---
+        if (member.missileTarget && !member.missileReady) {
+          member.missileReady = true;
+          const targetName = ships[member.missileTarget]?.name || "alvo";
+          relatorio.push(`${ship.name}: Mira de míssil em ${targetName} travada!`);
+        }
       });
     }
   });
 
-  localStorage.setItem(DB_KEY, JSON.stringify(ships));
+  localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
   return relatorio;
 };
 
@@ -270,6 +286,10 @@ export const processPlayerAttack = (attackerShipId, targetShipId, inputDamage, i
     }
   }
 
+  if (weaponEffect.toLowerCase().includes("míssil")) {
+    attacker.missileCooldown = 2; 
+  }
+
   // 4. Avaria de Módulo (Crítico/Extremo)
    if (target.currentHP <= 0 && target.status !== "destruida" && target.isEnemy) {
     setTimeout(() => {
@@ -291,6 +311,7 @@ export const processPlayerAttack = (attackerShipId, targetShipId, inputDamage, i
       }
     }, 4000); 
   }
+  
   localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
 
   // 5. Integração com o Log Nativo do Header (Usando o Novo Padrão)
@@ -338,6 +359,12 @@ export const repairAllShipsGlobal = () => {
     // 1. Restaura o HP para o máximo
     if (ship.currentHP < ship.maxHP) {
       ship.currentHP = ship.maxHP;
+      changed = true;
+    }
+
+    // NOVA REGRA: Remove o status de "destruida" de naves aliadas
+    if (!ship.isEnemy && ship.status === "destruida") {
+      ship.status = "ativa";
       changed = true;
     }
 

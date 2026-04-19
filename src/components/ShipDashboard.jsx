@@ -6,8 +6,7 @@ import ShipRadarChart from "./ShipRadarChart";
 import AssignCrew from "./AssignCrew";
 import { removePlayerFromAllCrews } from "../utils/mockApi"; // Adicione o import para a função de limpeza de tripulação
 import DexterityRanking from "./Destreza"; // <-- NOVO IMPORT
-import { getShipData, updateShipAttributes, getAllShips, processPlayerAttack } from "../utils/mockApi";
-
+import { getShipData, updateShipAttributes, getAllShips, processPlayerAttack, updateShipConfig } from "../utils/mockApi";
 
 // Painel principal da nave com interface Starfield
 const ShipDashboard = ({ playerData, onLogout }) => {
@@ -31,10 +30,34 @@ const [combatJournal, setCombatJournal] = useState([]); // <--- ADICIONE ESTA LI
 const rechargeSound = useRef(new Audio('/recharge.mp3'));
 const powerDownGeneric = useRef(new Audio('/outage1.mp3')); 
 const powerDownOutage = useRef(new Audio('/outage.mp3'));   
+const missSound = useRef(new Audio('/miss.wav'));
 const hitSound = useRef(new Audio('/hit.mp3'));             // <-- NOVO: Dano normal
 const critSound = useRef(new Audio('/magic_crumple2.ogg')); // <-- NOVO: Crítico/Extremo
 const shieldSound = useRef(new Audio('/shield.mp3')); // <--- ADICIONE ESTA LINHA
 const soundTimeout = useRef(null);
+const targetSound = useRef(new Audio('/mira.wav'));
+
+// Verifica se há alguma nave apontando um míssil para a nave Deste jogador
+const currentlyTargeted = allShipsList.some(s =>
+  s.activeCrew && s.activeCrew.some(m => m.missileTarget === playerData.ship)
+);
+
+// Controla o áudio de mira
+useEffect(() => {
+  if (currentlyTargeted) {
+    if (targetSound.current) {
+      targetSound.current.loop = true;
+      if (targetSound.current.paused) {
+        targetSound.current.play().catch(e => console.warn("Áudio bloqueado:", e));
+      }
+    }
+  } else {
+    if (targetSound.current) {
+      targetSound.current.pause();
+      targetSound.current.currentTime = 0;
+    }
+  }
+}, [currentlyTargeted]);
 
 
 
@@ -161,16 +184,16 @@ useEffect(() => {
     }
 
     if (data.isRepair) {
-      overlayText = "REPARO";
+      overlayText = "reparo";
       overlayType = "miss";
     } else if (data.isAbsorbed) {
-      overlayText = "ABSORVIDO";
+      overlayText = "absorvido!";
       overlayType = "miss";
     } else if (data.damage > 0) {
       overlayText = `-${data.damage} HP`;
       overlayType = data.isPlayerAction ? "damage-dealt" : "hit";
     } else {
-      overlayText = "FALHOU!";
+      overlayText = "falhou!";
       overlayType = "miss";
     }
 
@@ -226,6 +249,14 @@ useEffect(() => {
             shieldSound.current.pause();
           }
         }, 1200);
+      }
+    }
+    // ERRO (MISS)
+    else if (hitEvent.type  === "miss") {
+      if (missSound.current) {
+        missSound.current.currentTime = 0;
+        missSound.current.volume = 1.0;
+        missSound.current.play().catch(e => console.warn("Erro áudio:", e));
       }
     }
   }
@@ -410,6 +441,48 @@ useEffect(() => {
 // Localize esta função por volta da linha 250 do ShipDashboard.jsx
 const handleConfirmAttack = () => {
   if (!attackTarget) return;
+
+  // --- TRAVA DE RECARGA PARA JOGADORES ---
+  if (attackWeaponType === "missiles" && shipInfo.missileCooldown > 0) {
+    alert(`SISTEMA EM RECARGA: Aguarde ${shipInfo.missileCooldown} turno(s) global(is) para disparar mísseis novamente.`);
+    return;
+  }
+
+  // Lógica de mira (Classe III+)
+  if (attackWeaponType === "missiles" && shipInfo.shipClass !== "type_II") {
+    const currentShips = getAllShips();
+    const myShip = currentShips[playerData.ship];
+    
+    if (myShip && myShip.activeCrew) {
+      const centerTurret = myShip.activeCrew.find(m => m.function.includes("CENTRO"));
+      
+      // Se não achar a torreta central, barra o tiro!
+      if (!centerTurret) {
+        alert("ERRO: Sistema de Mísseis offline! Não há tripulação operacional na Torreta Central para operar a mira.");
+        return;
+      }
+
+      if (centerTurret.missileTarget !== attackTarget) {
+        centerTurret.missileTarget = attackTarget;
+        centerTurret.missileReady = false;
+        updateShipConfig(playerData.ship, { activeCrew: myShip.activeCrew });
+        setShowAttackModal(false);
+        alert("MIRA INICIADA! Aguarde o Mestre passar 1 Turno Global para concluir o cálculo.");
+        return;
+      } else if (!centerTurret.missileReady) {
+        alert("A MIRA AINDA NÃO ESTÁ PRONTA! O Mestre precisa passar o Turno Global.");
+        return;
+      } else {
+        // Limpa a mira e inicia a recarga para o tiro ser disparado
+        centerTurret.missileTarget = null;
+        centerTurret.missileReady = false;
+        updateShipConfig(playerData.ship, { 
+          activeCrew: myShip.activeCrew,
+          missileCooldown: 2 // Cooldown aplicado aqui
+        });
+      }
+    }
+  }
   
   const currentWeaponEffect = getEffect(
     shipInfo.shipClass, 
@@ -425,24 +498,6 @@ const handleConfirmAttack = () => {
     isExtremo, 
     currentWeaponEffect
   );
-
-  // --- CORREÇÃO AQUI ---
-  // Se for extremo, precisamos simular um valor > 0 para o overlay não dizer "falhou"
-  // Podemos calcular o dano real ou apenas passar um valor simbólico, 
-  // já que o processPlayerAttack cuidará do banco de dados.
-//const visualDamage = isExtremo ? 999 : parseInt(attackDamage || 0);
-/*
-  const localFeedback = {
-    targetName: attackTarget,
-    damage: visualDamage, 
-    isAbsorbed: false,
-    isPlayerAction: true, 
-    isExtremo: isExtremo, // Passamos a flag para o visual também
-    timestamp: Date.now(),
-    logText: isExtremo ? "DISPARO EXTREMO CONFIRMADO!" : "Disparo confirmado..." 
-  };*/
-
-  //window.dispatchEvent(new CustomEvent("combat:event", { detail: localFeedback }));
 
   setShowAttackModal(false);
   setAttackTarget("");
@@ -782,10 +837,10 @@ const handleConfirmAttack = () => {
             BALÍSTICO
           </button>
           <button 
-            className={attackWeaponType === "missiles" ? "active" : ""}
+            className={`${attackWeaponType === "missiles" ? "active" : ""} ${shipInfo.missileCooldown > 0 ? "disabled-cooldown" : ""}`}
             onClick={() => setAttackWeaponType("missiles")}
           >
-            MÍSSIL
+            {shipInfo.missileCooldown > 0 ? `MÍSSIL (${shipInfo.missileCooldown}T)` : "MÍSSIL"}
           </button>
         </div>
 
@@ -844,6 +899,14 @@ const handleConfirmAttack = () => {
     </div>
   </div>
 )}
+{currentlyTargeted && (
+        <div className="missile-lock-overlay">
+          <div className="crosshair-container">
+            <div className="crosshair-text">ALERTA: MIRA DE MÍSSIL DETECTADA</div>
+            <div className="crosshair-symbol"> - + - </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

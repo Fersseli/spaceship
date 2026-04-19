@@ -1143,3 +1143,64 @@
   animation: moduleMsgFadeInOut 5s ease-in-out forwards;
   box-shadow: 0 0 20px rgba(255, 174, 0, 0.5);
 }
+
+/* ========================================= */
+/* OVERLAY DA MIRA INIMIGA                   */
+/* ========================================= */
+.missile-lock-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none; /* Para não bloquear cliques */
+  z-index: 9998; /* Fica logo atrás do dano */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: radial-gradient(circle, transparent 50%, rgba(255, 0, 0, 0.15) 100%);
+  animation: pulse-red-bg 2s infinite alternate;
+}
+
+.crosshair-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: #ff3c1e;
+  text-shadow: 0 0 15px rgba(255, 60, 30, 0.8);
+}
+
+.crosshair-text {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.5rem;
+  font-weight: bold;
+  letter-spacing: 5px;
+  margin-bottom: 1rem;
+  animation: blink-text 1s infinite;
+}
+
+.crosshair-symbol {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 8rem;
+  font-weight: 900;
+  animation: lock-scale 1s infinite alternate;
+}
+
+@keyframes pulse-red-bg {
+  0% { background: radial-gradient(circle, transparent 50%, rgba(255, 0, 0, 0.1) 100%); }
+  100% { background: radial-gradient(circle, transparent 40%, rgba(255, 0, 0, 0.3) 100%); }
+}
+
+@keyframes blink-text {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+@keyframes lock-scale {
+  from { transform: scale(0.95); opacity: 0.8; }
+  to { transform: scale(1.05); opacity: 1; }
+}
+
+.disabled-cooldown {
+  opacity: 0.5;
+  cursor: not-allowed;
+  border-color: #555 !important;
+  color: #888 !important;
+}

@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from "react";
-// Localize esta linha no topo do TerminalCombate.jsx
+import React, { useState, useEffect, useRef } from "react";// Localize esta linha no topo do TerminalCombate.jsx
 import { 
   getAllShips, 
   updateShipConfig, 
@@ -18,7 +17,7 @@ const canFire = (member, shipClass) => {
   return true;
 };
 const usesMissiles = (member, shipClass) =>
-  shipClass === "type_III" && member.function === "TORRETA CENTRO";
+  shipClass !== "type_II" && member.function.includes("CENTRO");
 
 const slotClass = (role) => {
   if (role === "piloto")   return "is-piloto";
@@ -43,7 +42,15 @@ const getPrecisao = (member) =>
 
 const CrewSlot = ({ member, attackerShip, allShips, onFire }) => {
   const [open, setOpen] = useState(false);
-  const [targetId, setTargetId] = useState("");
+  const [targetId, setTargetId] = useState(member.missileTarget || "");
+  
+  // Atualiza o select caso a mira mude no banco
+  useEffect(() => {
+    if (member.missileTarget) setTargetId(member.missileTarget);
+  }, [member.missileTarget]);
+
+  const isMissileLocked = member.missileTarget === targetId;
+  const isMissileReady = member.missileReady;
 
   const fires = canFire(member, attackerShip.shipClass);
   const missiles = usesMissiles(member, attackerShip.shipClass);
@@ -140,7 +147,9 @@ const CrewSlot = ({ member, attackerShip, allShips, onFire }) => {
               disabled={!targetId}
               onClick={handleDisparo}
             >
-              {missiles ? " MÍSSIL" : "DISPARAR"}
+              {missiles && attackerShip.shipClass !== "type_II" && targetId
+                ? (!isMissileLocked ? "MIRAR MÍSSIL" : (!isMissileReady ? "MIRANDO..." : "DISPARAR MÍSSIL"))
+                : (missiles ? " MÍSSIL" : "DISPARAR")}
             </button>
           </div>
         </div>
@@ -273,6 +282,7 @@ const TerminalCombate = ({ onBack }) => {
   const [activeEnemies, setActiveEnemies] = useState([]);
   const [combatLog,     setCombatLog]     = useState([]);
   const [lastRefresh,   setLastRefresh]   = useState(new Date());
+  const turnSound = useRef(new Audio('/passarturno.wav'));
 
   const refresh = () => {
     const ships = getAllShips();
@@ -309,9 +319,47 @@ useEffect(() => {
 
   // ── Motor de Resolução ────────────────────────────────────────────────────
 
- const handleFire = (member, attackerShip, targetId, missiles) => {
+const handleFire = (member, attackerShip, targetId, missiles) => {
     const ships = getAllShips();
     const target = ships[targetId];
+
+    // --- NOVO: VERIFICAÇÃO DE RECARGA ---
+    if (missiles && attackerShip.missileCooldown > 0) {
+      addLog({ 
+        hit: false, 
+        text: `⏳ ${attackerShip.name}: Sistemas de mísseis em recarga (${attackerShip.missileCooldown}t restantes).` 
+      });
+      return;
+    }
+
+    if (missiles && attackerShip.shipClass !== "type_II") {
+      const attackerCrewMember = ships[attackerShip.id].activeCrew.find(m => m.id === member.id);
+
+      if (attackerCrewMember.missileTarget !== targetId) {
+        // Inicia a mira e para a função (não atira ainda)
+        attackerCrewMember.missileTarget = targetId;
+        attackerCrewMember.missileReady = false;
+        localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
+
+        addLog({ hit: false, text: `⚠️ ${attackerShip.name} iniciou travamento de mira em ${target.name}!` });
+        refresh();
+        return; 
+      } else if (!attackerCrewMember.missileReady) {
+        addLog({ hit: false, text: `⏳ ${attackerShip.name} ainda está calculando a mira. Aguarde o Turno Global.` });
+        return;
+      } else {
+        // --- CORREÇÃO: Limpa a mira, INICIA A RECARGA e permite o dano! ---
+        attackerCrewMember.missileTarget = null;
+        attackerCrewMember.missileReady = false;
+        
+        // Aplica o cooldown na memória antes de salvar
+        ships[attackerShip.id].missileCooldown = 2; 
+        
+        localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
+      }
+    }
+    
+    // ... O resto da função original a partir de: "const precisao = member.precisao || 50;"
     const precisao = member.precisao || 50;
 
     // Configura os dados da arma
@@ -443,6 +491,12 @@ const msg = [
             className="tc-fire-btn" 
             style={{ background: '#ffae00', color: '#000', width: 'auto', padding: '0.5rem 1rem' }}
             onClick={() => {
+
+              if (turnSound.current) {
+                turnSound.current.currentTime = 0; // Reseta o som caso clique rápido
+                turnSound.current.play().catch(e => console.warn("Áudio bloqueado:", e));
+              }
+              
               const reparos = processGlobalTurn();
               if (reparos.length > 0) {
                 // Adiciona ao log local do mestre
