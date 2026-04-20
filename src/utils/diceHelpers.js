@@ -1,8 +1,8 @@
 // src/utils/diceHelpers.js
 
 const rollDie = (faces) => {
-  return Math.floor(Math.random() * faces) + 1;
-  //return 1;
+  //return Math.floor(Math.random() * faces) + 1;
+  return 1;
 };
 
 

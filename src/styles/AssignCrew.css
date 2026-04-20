@@ -419,3 +419,19 @@
   .assign-player-row { flex-direction: column; align-items: flex-start; gap: 0.8rem; }
   .assign-player-controls { width: 100%; display: grid; grid-template-columns: 1fr 1fr; }
 }
+
+.assign-shield-card {
+  grid-column: 1 / -1;
+  border-left-color: rgba(176, 38, 255, 0.5) !important;
+}
+ 
+.assign-shield-card.status-avariada {
+  border-left-color: #b026ff !important;
+  background: rgba(176, 38, 255, 0.05) !important;
+}
+ 
+.assign-shield-card.status-destruida {
+  border-left-color: #ff3c1e !important;
+  background: rgba(255, 60, 30, 0.05) !important;
+  opacity: 0.9;
+}

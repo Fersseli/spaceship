@@ -682,3 +682,71 @@
 .tc-lock-box.blink-red {
   animation: pulse-red 0.5s infinite alternate;
 }
+
+.tc-shield-status-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  background: rgba(176, 38, 255, 0.1);
+  border: 1px solid rgba(176, 38, 255, 0.4);
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+ 
+.tc-shield-icon {
+  font-size: 0.75rem;
+}
+ 
+.tc-shield-dots {
+  display: flex;
+  gap: 3px;
+}
+ 
+.tc-shield-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+ 
+.tc-shield-dot.damaged {
+  background: #b026ff;
+  box-shadow: 0 0 5px #b026ff;
+  animation: pulse-shield-dmg 1.4s ease-in-out infinite alternate;
+}
+ 
+.tc-shield-dot.destroyed {
+  background: #ff3c1e;
+  box-shadow: 0 0 5px #ff3c1e;
+  animation: pulse-shield-dmg-red 0.8s ease-in-out infinite alternate;
+}
+ 
+.tc-shield-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.5rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+ 
+.tc-shield-label.damaged   { color: #b026ff; }
+.tc-shield-label.destroyed { color: #ff3c1e; }
+ 
+/* Entrada de log com escudo */
+.tc-log-entry.shield-hit {
+  border-left-color: #b026ff;
+  background: rgba(176, 38, 255, 0.04);
+}
+ 
+/* Mini controle bloqueado por avaria */
+.tc-mini-ctrl--blocked .tc-mini-val {
+  color: #ff3c1e;
+}
+ 
+.tc-mini-ctrl--blocked .tc-mini-btns button:first-child {
+  background: rgba(255, 60, 30, 0.1);
+  border-color: rgba(255, 60, 30, 0.3);
+  color: rgba(255, 255, 255, 0.2);
+  cursor: not-allowed;
+  pointer-events: none;
+}

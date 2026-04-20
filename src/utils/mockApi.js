@@ -1,10 +1,10 @@
 // src/utils/mockApi.js
 import { shipsDatabase } from '../data/ships';
 import { rollDamage, parseShield } from "./diceHelpers";
-import { getEffect } from "./effectHelpers"; // ou effectHelper
+import { getEffect } from "./effectHelpers";
 
 const DB_KEY         = "heavens_door_ships_db";
-const DB_VERSION     = 8;
+const DB_VERSION     = 9; // bumped to force re-init if needed
 const DB_VERSION_KEY = "heavens_door_ships_db_version";
 
 export const removePlayerFromAllCrews = (playerId) => {
@@ -46,33 +46,41 @@ export const getAllShips = () => {
   initDB();
   return JSON.parse(localStorage.getItem(DB_KEY));
 };
-// --- NOVAS FUNÇÕES: LIMITES DE ENERGIA POR AVARIA ---
+
+// ─── LIMITES DE ENERGIA POR AVARIA ───────────────────────────────────────────
 export const getShipMaxAttributes = (ship) => {
   const maxAttrs = { weapons: 6, missiles: 6, controls: 6, shields: 6, engines: 6 };
   if (!ship || !ship.activeCrew) return maxAttrs;
 
   if (ship.shipClass === "type_III") {
-    // CLASSE 3
-    const left = ship.activeCrew.find(m => m.function && m.function.includes("ESQUERDA"));
-    const right = ship.activeCrew.find(m => m.function && m.function.includes("DIREITA"));
+    const left   = ship.activeCrew.find(m => m.function && m.function.includes("ESQUERDA"));
+    const right  = ship.activeCrew.find(m => m.function && m.function.includes("DIREITA"));
     const center = ship.activeCrew.find(m => m.function && m.function.includes("CENTRO"));
 
     let sideDownCount = 0;
-    if (left && left.moduleStatus !== 'operacional') sideDownCount++;
+    if (left  && left.moduleStatus  !== 'operacional') sideDownCount++;
     if (right && right.moduleStatus !== 'operacional') sideDownCount++;
 
-    if (sideDownCount === 1) maxAttrs.weapons = 3; // 1 torreta avariada = Máximo 3
-    if (sideDownCount === 2) maxAttrs.weapons = 0; // 2 torretas avariadas = Máximo 0
+    if (sideDownCount === 1) maxAttrs.weapons = 3;
+    if (sideDownCount === 2) maxAttrs.weapons = 0;
 
-    if (center && center.moduleStatus !== 'operacional') maxAttrs.missiles = 0; // Míssil avariado = Máximo 0
+    if (center && center.moduleStatus !== 'operacional') maxAttrs.missiles = 0;
   } else if (ship.shipClass === "type_II") {
-    // CLASSE 2 (Copiloto nos NPCs, ou Torreta Central nos Jogadores)
     const copilot = ship.activeCrew.find(m => m.function && (m.function.includes("COPILOTO") || m.function.includes("CENTRO")));
     if (copilot) {
-      if (copilot.moduleStatus === 'avariada') maxAttrs.weapons = 2; // Bloqueia 4 pontos (6-4 = max 2)
-      if (copilot.moduleStatus === 'destruida') maxAttrs.weapons = 0; // Bloqueia tudo (max 0)
+      if (copilot.moduleStatus === 'avariada')  maxAttrs.weapons = 2;
+      if (copilot.moduleStatus === 'destruida') maxAttrs.weapons = 0;
     }
   }
+
+  // ─── AVARIA DE ESCUDOS ─────────────────────────────────────────────────────
+  // shieldStatus é armazenado diretamente na nave (não num membro de tripulação)
+  if (ship.shieldStatus === 'avariada') {
+    maxAttrs.shields = 2; // bloqueia distribuição acima do nível 4
+  } else if (ship.shieldStatus === 'destruida') {
+    maxAttrs.shields = 0; // escudo completamente desativado
+  }
+
   return maxAttrs;
 };
 
@@ -80,34 +88,39 @@ export const enforceAttributeLimits = (ship) => {
   if (!ship || !ship.attributes) return false;
   let changed = false;
   const maxAttrs = getShipMaxAttributes(ship);
-  
+
   Object.keys(ship.attributes).forEach(attr => {
     if (ship.attributes[attr] > maxAttrs[attr]) {
-      // "Cospe" os pontos de volta ao forçar o atributo a baixar para o novo limite
-      ship.attributes[attr] = maxAttrs[attr]; 
+      ship.attributes[attr] = maxAttrs[attr];
       changed = true;
     }
   });
   return changed;
 };
 
-  // No src/utils/mockApi.js, adicione esta lógica para inicializar a tripulação se ela não existir
+// ─── INICIALIZAÇÃO DE TRIPULAÇÃO DE NAVE ALIADA ───────────────────────────────
 export const getShipData = (shipId) => {
   const ships = getAllShips();
   const ship = ships[shipId];
 
-  // Se for uma nave de jogador e não tiver activeCrew, criamos um baseado na config de torretas
   if (ship && !ship.isEnemy && (!ship.activeCrew || ship.activeCrew.length === 0)) {
     ship.activeCrew = ship.crew.torretas.map(t => ({
-      id: t.id, // ex: 'esquerda'
+      id: t.id,
       role: 'tripulante',
       function: `TORRETA ${t.id.toUpperCase()}`,
       moduleStatus: 'operacional',
       turnosParaReparo: 0
     }));
-    // Salva a inicialização
     localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
   }
+
+  // Garante que shieldStatus exista
+  if (ship && ship.shieldStatus === undefined) {
+    ship.shieldStatus = 'operacional';
+    ship.shieldTurnosParaReparo = 0;
+    localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
+  }
+
   return ship;
 };
 
@@ -133,6 +146,7 @@ export const updateShipConfig = (shipId, newData) => {
     localStorage.setItem(DB_KEY, JSON.stringify(ships));
   }
 };
+
 export const clearDestroyedEnemies = () => {
   const ships = getAllShips();
   let changed = false;
@@ -146,21 +160,18 @@ export const clearDestroyedEnemies = () => {
   if (changed) localStorage.setItem(DB_KEY, JSON.stringify(ships));
 };
 
-// --- ADICIONE ESTA NOVA FUNÇÃO AQUI ---
 export const deactivateAllEnemies = () => {
   const ships = getAllShips();
   let changed = false;
   Object.values(ships).forEach(s => {
-    // Pega em todas as naves inimigas que não estejam já desativadas (inclui as ativas e as destruídas)
     if (s.isEnemy && s.status !== "desativada") {
       s.status = "desativada";
-      s.activeCrew = []; // Esvazia a tripulação
+      s.activeCrew = [];
       changed = true;
     }
   });
   if (changed) localStorage.setItem(DB_KEY, JSON.stringify(ships));
 };
-
 
 export const enemyNamesPool = [...new Set([
   "Solo", "Calrissian", "Maverick", "Goose", "Senna", "Verstappo", "Alonso", "Cruise", "Torreto", "Pitt", "Fujiwara", "McQueen", "Gosling", "Drive", "Sega", "Skywalker", "Ligthyear", "Nemo", "Kaneda", "Tetsuo", "West", "O'conner", "Grace", "Mountain", "Hudson", "Dusty", "Quill", "Jones", "Reeve", "Stilgar", "Dameron", "Deckard", "Flint", "Ayanami", "Ikari", "Asuka", "Boss", "Snake", "Chief", "Hamiltton", "Kojima", "Walker", "Idaho", "Atreides", "Scytale", "Leto", "Harah", "Kenobi", "Hutt", "Alves", "Welles", "Ashura", "Mahat", "Zepelli", "Joestar", "Akbar", "Shitto", "Hirose", "Madera", "Edge", "Iceman", "Caveman", "Murderkill", "Harkonnen", "Feyd-Rautha", "Rabban", "Corrino", "Liet-Kynes", "Sardaukar", "Shadout", "Assad", "Bashar", "Gesserit", "Nate", "Megaton", "Chance", "Tano", "Destroyer", "Momoa", "Armas", "Rossi", "Telles", "Cody", "Moff", "Fett", "Tarantino", "Kubrick", "Windu", "Amidala", "Antilles", "Rorschach", "Mata", "Maniac", "Russo", "Mohammed", "Abdul", "Kakyoin", "Matte", "Croft", "Hannibal", "Krueger", "Xenomorph", "Samara", "Khan", "Harvey", "Fring", "Black", "Montana", "Punisher", "Terminator", "Ted", "Wayne", "Berkowitz", "Brudos", "Doe", "Rapid", "Strangler", "DeAngelo", "Nightstalker", "Zedong", "Saddam", "Franco", "Maduro", "Mugabe", "Barack", "Capone", "Haunter", "Mirror", "Raven", "Mortis", "Graves", "Banshee", "Voss", "Wraith"
@@ -189,18 +200,21 @@ export const setEnemyShipStatus = (shipId, newStatus) => {
     const newCrew = [];
     const rndDes = () => Math.floor(Math.random() * (17 - 8 + 1)) + 8;
     const rndEsq = () => Math.floor(Math.random() * (75 - 35 + 1)) + 35;
-    
+
     if (ship.shipClass === "type_II") {
-      newCrew.push({ id: chosen[0].toUpperCase(), role: "piloto", function: "PILOTO", des: rndDes(), esq: rndEsq(), precisao: rndPrecisao(), moduleStatus: 'operacional', turnosParaReparo: 0 });
+      newCrew.push({ id: chosen[0].toUpperCase(), role: "piloto",    function: "PILOTO",   des: rndDes(), esq: rndEsq(), precisao: rndPrecisao(), moduleStatus: 'operacional', turnosParaReparo: 0 });
       if (chosen[1]) newCrew.push({ id: chosen[1].toUpperCase(), role: "copiloto", function: "COPILOTO", des: rndDes(), esq: rndEsq(), precisao: rndPrecisao(), moduleStatus: 'operacional', turnosParaReparo: 0 });
     } else {
-      newCrew.push({ id: chosen[0].toUpperCase(), role: "piloto", function: "PILOTO", des: rndDes(), esq: rndEsq(), precisao: rndPrecisao(), moduleStatus: 'operacional', turnosParaReparo: 0 });
-      if (chosen[1]) newCrew.push({ id: chosen[1].toUpperCase(), role: "copiloto", function: "COPILOTO", des: rndDes(), esq: rndEsq(), precisao: rndPrecisao(), moduleStatus: 'operacional', turnosParaReparo: 0 });
+      newCrew.push({ id: chosen[0].toUpperCase(), role: "piloto",    function: "PILOTO",           des: rndDes(), esq: rndEsq(), precisao: rndPrecisao(), moduleStatus: 'operacional', turnosParaReparo: 0 });
+      if (chosen[1]) newCrew.push({ id: chosen[1].toUpperCase(), role: "copiloto",   function: "COPILOTO",         des: rndDes(), esq: rndEsq(), precisao: rndPrecisao(), moduleStatus: 'operacional', turnosParaReparo: 0 });
       if (chosen[2]) newCrew.push({ id: chosen[2].toUpperCase(), role: "tripulante", function: "TORRETA ESQUERDA", des: rndDes(), esq: rndEsq(), precisao: rndPrecisao(), moduleStatus: 'operacional', turnosParaReparo: 0 });
-      if (chosen[3]) newCrew.push({ id: chosen[3].toUpperCase(), role: "tripulante", function: "TORRETA CENTRO", des: rndDes(), esq: rndEsq(), precisao: rndPrecisao(), moduleStatus: 'operacional', turnosParaReparo: 0 });
-      if (chosen[4]) newCrew.push({ id: chosen[4].toUpperCase(), role: "tripulante", function: "TORRETA DIREITA", des: rndDes(), esq: rndEsq(), precisao: rndPrecisao(), moduleStatus: 'operacional', turnosParaReparo: 0 });
+      if (chosen[3]) newCrew.push({ id: chosen[3].toUpperCase(), role: "tripulante", function: "TORRETA CENTRO",   des: rndDes(), esq: rndEsq(), precisao: rndPrecisao(), moduleStatus: 'operacional', turnosParaReparo: 0 });
+      if (chosen[4]) newCrew.push({ id: chosen[4].toUpperCase(), role: "tripulante", function: "TORRETA DIREITA",  des: rndDes(), esq: rndEsq(), precisao: rndPrecisao(), moduleStatus: 'operacional', turnosParaReparo: 0 });
     }
     ship.activeCrew = newCrew;
+    // Garante campos de escudo na ativação
+    ship.shieldStatus = 'operacional';
+    ship.shieldTurnosParaReparo = 0;
   }
 
   if (newStatus === "desativada") {
@@ -211,9 +225,7 @@ export const setEnemyShipStatus = (shipId, newStatus) => {
   localStorage.setItem(DB_KEY, JSON.stringify(ships));
 };
 
-/**
- * Aplica degradação de status a um módulo (tripulante)
- */
+// ─── AVARIA DE MÓDULO (TRIPULANTE) ────────────────────────────────────────────
 export const applyModuleDamage = (shipId, memberId) => {
   const ships = getAllShips();
   const ship = ships[shipId];
@@ -234,21 +246,99 @@ export const applyModuleDamage = (shipId, memberId) => {
   } else {
     return "Módulo já está destruído";
   }
-  
-  enforceAttributeLimits(ship); // NOVO
+
+  enforceAttributeLimits(ship);
   localStorage.setItem(DB_KEY, JSON.stringify(ships));
   return statusMsg;
 };
 
+// ─── AVARIA DE ESCUDOS ────────────────────────────────────────────────────────
 /**
- * Processa a recuperação de módulos avariados globalmente
+ * Aplica dano ao sistema de escudos da nave.
+ * Retorna uma string de log descrevendo o que ocorreu.
  */
+export const applyShieldDamage = (shipId) => {
+  const ships = getAllShips();
+  const ship = ships[shipId];
+  if (!ship) return "Nave não encontrada";
+
+  // Garante campos existam
+  if (!ship.shieldStatus) ship.shieldStatus = 'operacional';
+  if (!ship.shieldTurnosParaReparo) ship.shieldTurnosParaReparo = 0;
+
+  let statusMsg = "";
+
+  if (ship.shieldStatus === 'operacional') {
+    ship.shieldStatus = 'avariada';
+    ship.shieldTurnosParaReparo = 2;
+    statusMsg = `ESCUDOS AVARIADOS! Limite: nível 4 (2 turnos para reparo)`;
+  } else if (ship.shieldStatus === 'avariada') {
+    ship.shieldStatus = 'destruida';
+    ship.shieldTurnosParaReparo = 3;
+    statusMsg = `ESCUDOS DESTRUÍDOS! Completamente offline (3 turnos para reparo)`;
+  } else {
+    return "Escudos já estão completamente destruídos";
+  }
+
+  enforceAttributeLimits(ship);
+  localStorage.setItem(DB_KEY, JSON.stringify(ships));
+  return statusMsg;
+};
+
+// ─── SELEÇÃO DE MÓDULO PARA AVARIA (COM PROBABILIDADE AUMENTADA) ──────────────
+/**
+ * Seleciona qual módulo será avariado num acerto crítico/extremo.
+ * Módulos já avariados têm +5% de chance de ser escolhidos novamente (destruindo-os).
+ *
+ * Retorna { tipo: 'torreta'|'escudo', memberId?: string }
+ */
+export const selectDamageTarget = (ship) => {
+  // Candidatos: torretas (e copiloto em type_II) + escudos
+  const torretaMembers = (ship.activeCrew || []).filter(m => {
+    if (!m.function) return false;
+    if (m.function.includes("TORRETA")) return true;
+    if (ship.shipClass === "type_II" && m.function.includes("COPILOTO")) return true;
+    return false;
+  });
+
+  // Monta lista de candidatos com pesos
+  // Base weight = 10 por candidato; já avariado = +5 (50% a mais)
+  const candidates = [];
+
+  torretaMembers.forEach(m => {
+    if (m.moduleStatus === 'destruida') return; // já destruída, não conta
+    const baseWeight = 10;
+    const extraWeight = m.moduleStatus === 'avariada' ? 5 : 0;
+    candidates.push({ tipo: 'torreta', memberId: m.id, weight: baseWeight + extraWeight });
+  });
+
+  // Escudos: se já destruídos, não entra
+  const shieldStatus = ship.shieldStatus || 'operacional';
+  if (shieldStatus !== 'destruida') {
+    const baseWeight = 10;
+    const extraWeight = shieldStatus === 'avariada' ? 5 : 0;
+    candidates.push({ tipo: 'escudo', weight: baseWeight + extraWeight });
+  }
+
+  if (candidates.length === 0) return null;
+
+  // Seleção ponderada
+  const totalWeight = candidates.reduce((sum, c) => sum + c.weight, 0);
+  let rand = Math.random() * totalWeight;
+  for (const c of candidates) {
+    rand -= c.weight;
+    if (rand <= 0) return c;
+  }
+  return candidates[candidates.length - 1];
+};
+
+// ─── TURNO GLOBAL ─────────────────────────────────────────────────────────────
 export const processGlobalTurn = () => {
   const ships = getAllShips();
   let relatorio = [];
 
   Object.values(ships).forEach(ship => {
-    // --- NOVO: REDUÇÃO DE COOLDOWN DE MÍSSEIS ---
+    // Redução de cooldown de mísseis
     if (ship.missileCooldown > 0) {
       ship.missileCooldown -= 1;
       if (ship.missileCooldown === 0) {
@@ -256,9 +346,9 @@ export const processGlobalTurn = () => {
       }
     }
 
+    // Reparo de módulos de tripulação
     if (ship.activeCrew) {
       ship.activeCrew.forEach(member => {
-        // Reparos normais
         if (member.moduleStatus === 'avariada' && member.turnosParaReparo > 0) {
           member.turnosParaReparo -= 1;
           if (member.turnosParaReparo === 0) {
@@ -267,7 +357,7 @@ export const processGlobalTurn = () => {
           }
         }
 
-        // --- NOVO: PROCESSAMENTO DE MIRA DE MÍSSIL ---
+        // Mira de míssil
         if (member.missileTarget && !member.missileReady) {
           member.missileReady = true;
           const targetName = ships[member.missileTarget]?.name || "alvo";
@@ -275,110 +365,107 @@ export const processGlobalTurn = () => {
         }
       });
     }
-    enforceAttributeLimits(ship); // NOVO: Garante destravamento ao reparar pelo tempo
+
+    // ─── Reparo de escudos por turno ────────────────────────────────────────
+    if (ship.shieldStatus && ship.shieldStatus !== 'operacional' && ship.shieldTurnosParaReparo > 0) {
+      ship.shieldTurnosParaReparo -= 1;
+      if (ship.shieldTurnosParaReparo === 0) {
+        ship.shieldStatus = 'operacional';
+        relatorio.push(`${ship.name}: Escudos restaurados!`);
+      }
+    }
+
+    enforceAttributeLimits(ship);
   });
 
   localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
   return relatorio;
 };
 
+// ─── ATAQUE DE JOGADOR ────────────────────────────────────────────────────────
 export const processPlayerAttack = (attackerShipId, targetShipId, inputDamage, isExtremo, weaponEffect, isMissile = false) => {
   const ships = getAllShips();
   const attacker = ships[attackerShipId];
-  const target = ships[targetShipId];
-  
+  const target   = ships[targetShipId];
+
   if (!attacker || !target) return;
 
-  // 1. Calcular Dano Máximo e Crítico
+  // Garante campos de escudo
+  if (!target.shieldStatus) target.shieldStatus = 'operacional';
+  if (!target.shieldTurnosParaReparo) target.shieldTurnosParaReparo = 0;
+
   const { maxDamage } = rollDamage(weaponEffect, true);
   const finalRawDamage = isExtremo ? maxDamage : parseInt(inputDamage || 0);
   const isCritico = !isExtremo && finalRawDamage >= (maxDamage * 0.8);
 
-  // 2. Resolução de Escudos
   const targetShieldLevel = target.attributes?.shields ?? 0;
   const shieldEffect = getEffect(target.shipClass, "shields", targetShieldLevel);
-  const shieldValue = parseShield(shieldEffect);
-  const finalDamage = Math.max(0, finalRawDamage - shieldValue);
+  const shieldValue  = parseShield(shieldEffect);
+  const finalDamage  = Math.max(0, finalRawDamage - shieldValue);
 
-  // 3. Aplicar Dano
   target.currentHP = Math.max(0, (target.currentHP ?? target.maxHP) - finalDamage);
 
-  // 4. Avaria de Módulo (Crítico/Extremo)
   let moduleLog = "";
-  // Só causa avaria se o dano ultrapassou o escudo (finalDamage > 0)
-  if ((isCritico || isExtremo) && finalDamage > 0 && target.activeCrew?.length > 0) { // Filtra Torretas. Se for Classe II, o Copiloto também é um alvo válido
-    const alvosAvariaveis = target.activeCrew.filter(m => {
-      if (!m.function) return false;
-      if (m.function.includes("TORRETA")) return true;
-      if (target.shipClass === "type_II" && m.function.includes("COPILOTO")) return true;
-      return false;
-    });
-    
-    // Só aplica avaria se existir algum alvo válido na nave
-    if (alvosAvariaveis.length > 0) {
-      const randomIdx = Math.floor(Math.random() * alvosAvariaveis.length);
-      const targetModule = alvosAvariaveis[randomIdx];
 
-      if (targetModule.moduleStatus === 'operacional') {
-        targetModule.moduleStatus = 'avariada';
-        targetModule.turnosParaReparo = 2;
-        moduleLog = ` [AVARIA: ${targetModule.function}]`;
-      } else if (targetModule.moduleStatus === 'avariada') {
-        targetModule.moduleStatus = 'destruida';
-        targetModule.turnosParaReparo = 0;
-        moduleLog = ` [MÓDULO DESTRUÍDO: ${targetModule.function}]`;
+  if ((isCritico || isExtremo) && finalDamage > 0) {
+    const dmgTarget = selectDamageTarget(target);
+
+    if (dmgTarget) {
+      if (dmgTarget.tipo === 'torreta') {
+        const member = (target.activeCrew || []).find(m => m.id === dmgTarget.memberId);
+        if (member) {
+          if (member.moduleStatus === 'operacional') {
+            member.moduleStatus = 'avariada';
+            member.turnosParaReparo = 2;
+            moduleLog = ` [AVARIA: ${member.function}]`;
+          } else if (member.moduleStatus === 'avariada') {
+            member.moduleStatus = 'destruida';
+            member.turnosParaReparo = 0;
+            moduleLog = ` [MÓDULO DESTRUÍDO: ${member.function}]`;
+          }
+        }
+      } else if (dmgTarget.tipo === 'escudo') {
+        const shieldMsg = applyShieldDamageInternal(target);
+        moduleLog = ` [ESCUDO: ${shieldMsg}]`;
       }
     }
   }
-  enforceAttributeLimits(target); // NOVO: Causa o bloqueio se o tiro do player avariou algo!
 
- // Dentro de processPlayerAttack, localize o if (weaponEffect.toLowerCase().includes("míssil")) e substitua por:
+  enforceAttributeLimits(target);
 
- // Dentro de processPlayerAttack no mockApi.js:
   if (isMissile) {
     attacker.missileCooldown = 2;
     if (attacker.activeCrew) {
       attacker.activeCrew.forEach(m => {
-        if (m.missileTarget || m.missileLockLevel > 0) { 
-          m.missileLockLevel = 0; // Zera o visual
-          m.missileTarget = null; // Zera o alvo
-          m.missileReady = false; // Bloqueia o botão de atirar
+        if (m.missileTarget || m.missileLockLevel > 0) {
+          m.missileLockLevel = 0;
+          m.missileTarget    = null;
+          m.missileReady     = false;
         }
       });
     }
-    // SALVA TUDO NO LOCALSTORAGE
     localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
   }
 
-  // 4. Avaria de Módulo (Crítico/Extremo)
-   if (target.currentHP <= 0 && target.status !== "destruida" && target.isEnemy) {
+  if (target.currentHP <= 0 && target.status !== "destruida" && target.isEnemy) {
     setTimeout(() => {
       const currentShips = JSON.parse(localStorage.getItem("heavens_door_ships_db") || "{}");
       if (currentShips[targetShipId] && currentShips[targetShipId].currentHP <= 0) {
-        currentShips[targetShipId].status = "destruida";
+        currentShips[targetShipId].status     = "destruida";
         currentShips[targetShipId].activeCrew = [];
-        
-        // Converte o novo banco para texto
         const dbString = JSON.stringify(currentShips);
         localStorage.setItem("heavens_door_ships_db", dbString);
-        
-        // CORREÇÃO: Força a própria aba do jogador a "ouvir" essa alteração
-        // Isso fará com que o ShipDashboard atualize a lista na hora!
-        window.dispatchEvent(new StorageEvent('storage', {
-          key: 'heavens_door_ships_db',
-          newValue: dbString
-        }));
+        window.dispatchEvent(new StorageEvent('storage', { key: 'heavens_door_ships_db', newValue: dbString }));
       }
-    }, 4000); 
+    }, 4000);
   }
-  
+
   localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
 
-  // 5. Integração com o Log Nativo do Header (Usando o Novo Padrão)
   const tags = [];
-  if (isExtremo) tags.push("[🔥 ACERTO EXTREMO!]");
+  if (isExtremo)  tags.push("[🔥 ACERTO EXTREMO!]");
   else if (isCritico) tags.push("[✨ CRÍTICO!]");
-  if (moduleLog) tags.push(moduleLog);
+  if (moduleLog)  tags.push(moduleLog);
 
   const logText = [
     `${attacker.name} [ARMA FÍSICA: ${weaponEffect}]`,
@@ -389,70 +476,88 @@ export const processPlayerAttack = (attackerShipId, targetShipId, inputDamage, i
     `| HP: ${target.currentHP}/${target.maxHP}`,
     ...tags,
   ].join("  ");
-  
-const combatEvent = {
+
+  const combatEvent = {
     targetName: target.name,
     damage: finalDamage,
-    // Só é absorvido se havia dano inicial rolado, mas o dano final bateu no escudo e foi a zero
-    isAbsorbed: finalRawDamage > 0 && finalDamage === 0, 
+    isAbsorbed: finalRawDamage > 0 && finalDamage === 0,
     timestamp: Date.now(),
-    logText: logText,
-    isPlayerAction: true // <--- ADICIONE ESTA LINHA PARA FICAR AZUL!
+    logText,
+    isPlayerAction: true,
+    shieldHit: moduleLog.includes("ESCUDO"),
+    shieldDestroyed: moduleLog.includes("DESTRUÍDOS"),
   };
 
-  // Aciona outras abas (Ex: Copiloto vendo o tiro do Piloto)
   localStorage.setItem("last_combat_event", JSON.stringify(combatEvent));
-  
-  // Aciona a aba atual (O próprio Piloto que atirou)
   window.dispatchEvent(new CustomEvent("combat:event", { detail: combatEvent }));
 };
 
+// Helper interno — aplica dano de escudo ao objeto ship já carregado (sem re-ler o DB)
+const applyShieldDamageInternal = (ship) => {
+  if (!ship.shieldStatus) ship.shieldStatus = 'operacional';
 
+  if (ship.shieldStatus === 'operacional') {
+    ship.shieldStatus = 'avariada';
+    ship.shieldTurnosParaReparo = 2;
+    return `AVARIADOS! Limite nível 4 (2 turnos)`;
+  } else if (ship.shieldStatus === 'avariada') {
+    ship.shieldStatus = 'destruida';
+    ship.shieldTurnosParaReparo = 3;
+    return `DESTRUÍDOS! Offline (3 turnos)`;
+  }
+  return "já destruídos";
+};
 
-// Localize o final do arquivo src/utils/mockApi.js e adicione:
-
+// ─── REPARO GLOBAL ────────────────────────────────────────────────────────────
 export const repairAllShipsGlobal = () => {
   const ships = getAllShips();
   let changed = false;
 
   Object.values(ships).forEach(ship => {
-    // 1. Restaura o HP para o máximo
-    if (ship.currentHP < ship.maxHP) {
-      ship.currentHP = ship.maxHP;
-      changed = true;
-    }
+    if (ship.currentHP < ship.maxHP) { ship.currentHP = ship.maxHP; changed = true; }
 
-    // NOVA REGRA: Remove o status de "destruida" de naves aliadas
-    if (!ship.isEnemy && ship.status === "destruida") {
-      ship.status = "ativa";
-      changed = true;
-    }
+    if (!ship.isEnemy && ship.status === "destruida") { ship.status = "ativa"; changed = true; }
 
-    // 2. Restaura todos os módulos/tripulação (bolinhas roxas)
     if (ship.activeCrew) {
       ship.activeCrew.forEach(member => {
         if (member.moduleStatus !== 'operacional') {
-          member.moduleStatus = 'operacional';
+          member.moduleStatus     = 'operacional';
           member.turnosParaReparo = 0;
           changed = true;
         }
       });
     }
-    enforceAttributeLimits(ship); // NOVO: Destrava após reparo mágico
+
+    // Repara escudos também
+    if (ship.shieldStatus && ship.shieldStatus !== 'operacional') {
+      ship.shieldStatus            = 'operacional';
+      ship.shieldTurnosParaReparo  = 0;
+      changed = true;
+    }
+
+    enforceAttributeLimits(ship);
   });
 
-  if (changed) {
-    localStorage.setItem(DB_KEY, JSON.stringify(ships)); //
-  }
+  if (changed) localStorage.setItem(DB_KEY, JSON.stringify(ships));
   return changed;
 };
 
-// No final do arquivo mockApi.js, substitua a função incrementMissileLock inteira por esta:
+// ─── REPARO DE ESCUDO PELO ADMIN ──────────────────────────────────────────────
+export const repairShieldByAdmin = (shipId) => {
+  const ships = getAllShips();
+  const ship  = ships[shipId];
+  if (!ship) return;
+  ship.shieldStatus           = 'operacional';
+  ship.shieldTurnosParaReparo = 0;
+  enforceAttributeLimits(ship);
+  localStorage.setItem(DB_KEY, JSON.stringify(ships));
+};
 
+// ─── INCREMENTO DE TRAVA DE MÍSSIL ───────────────────────────────────────────
 export const incrementMissileLock = (shipId) => {
   const ships = getAllShips();
-  const ship = ships[shipId];
-  let alerts = [];
+  const ship  = ships[shipId];
+  let alerts  = [];
   let changed = false;
 
   if (ship && ship.activeCrew) {
@@ -460,20 +565,12 @@ export const incrementMissileLock = (shipId) => {
       let hasMissile = false;
       if (ship.crew && ship.crew.torretas) {
         const torreta = ship.crew.torretas.find(t => member.function && member.function.includes(t.id.toUpperCase()));
-        if (torreta && torreta.capabilities.includes("Míssil")) {
-          hasMissile = true;
-        }
+        if (torreta && torreta.capabilities.includes("Míssil")) hasMissile = true;
       }
 
-      // REGRA 1: Só incrementa se a nave tiver míssil E O TRIPULANTE TIVER UM ALVO TRAVADO
       if (hasMissile && member.missileTarget) {
         if (member.missileLockLevel === undefined) member.missileLockLevel = 0;
-        
-        if (member.missileLockLevel < 3) {
-          member.missileLockLevel += 1;
-          changed = true;
-        }
-        
+        if (member.missileLockLevel < 3) { member.missileLockLevel += 1; changed = true; }
         if (member.missileLockLevel === 3) {
           alerts.push(`ALERTA TÁTICO: O Míssil da ${ship.name} - ${member.function} atingiu trava máxima e deve ser lançado imediatamente!`);
         }

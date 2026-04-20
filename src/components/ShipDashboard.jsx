@@ -25,36 +25,25 @@ const ShipDashboard = ({ playerData, onLogout }) => {
   const [allShipsList, setAllShipsList] = useState([]);
   const [combatJournal, setCombatJournal] = useState([]);
 
-  // --- NOVO: estado do modal de confirmação customizado ---
   const [confirmState, setConfirmState] = useState({
-    isOpen: false,
-    title: "",
-    message: "",
-    subtext: "",
-    variant: "danger",
-    confirmLabel: "CONFIRMAR",
-    onConfirm: null,
+    isOpen: false, title: "", message: "", subtext: "",
+    variant: "danger", confirmLabel: "CONFIRMAR", onConfirm: null,
   });
 
-  const showConfirm = (opts) => {
-    setConfirmState({ isOpen: true, ...opts });
-  };
-
-  const closeConfirm = () => {
-    setConfirmState(prev => ({ ...prev, isOpen: false }));
-  };
+  const showConfirm = (opts) => setConfirmState({ isOpen: true, ...opts });
+  const closeConfirm = () => setConfirmState(prev => ({ ...prev, isOpen: false }));
 
   // --- Áudio ---
-  const rechargeSound = useRef(new Audio('/recharge.mp3'));
+  const rechargeSound    = useRef(new Audio('/recharge.mp3'));
   const powerDownGeneric = useRef(new Audio('/outage1.mp3'));
-  const powerDownOutage = useRef(new Audio('/outage.mp3'));
-  const missSound = useRef(new Audio('/miss.wav'));
-  const hitSound = useRef(new Audio('/hit.mp3'));
-  const critSound = useRef(new Audio('/magic_crumple2.ogg'));
-  const shieldSound = useRef(new Audio('/shield.mp3'));
-  const soundTimeout = useRef(null);
-  const targetSound = useRef(new Audio('/mira.wav'));
-  const confirmSound = useRef(new Audio('/confirm.wav'));
+  const powerDownOutage  = useRef(new Audio('/outage.mp3'));
+  const missSound        = useRef(new Audio('/miss.wav'));
+  const hitSound         = useRef(new Audio('/hit.mp3'));
+  const critSound        = useRef(new Audio('/magic_crumple2.ogg'));
+  const shieldSound      = useRef(new Audio('/shield.mp3'));
+  const soundTimeout     = useRef(null);
+  const targetSound      = useRef(new Audio('/mira.wav'));
+  const confirmSound     = useRef(new Audio('/confirm.wav'));
 
   const currentlyTargeted = allShipsList.some(s =>
     s.activeCrew && s.activeCrew.some(m => m.missileTarget === playerData.ship)
@@ -81,13 +70,13 @@ const ShipDashboard = ({ playerData, onLogout }) => {
     if (soundTimeout.current) clearTimeout(soundTimeout.current);
     const difference = endLevel - startLevel;
     if (difference <= 0) return;
-    const startSecond = startLevel * 0.5;
+    const startSecond      = startLevel * 0.5;
     const normalDurationMs = difference * 500;
     const desiredDurationMs = 500 + (difference - 1) * 200;
-    const speedMultiplier = normalDurationMs / desiredDurationMs;
-    rechargeSound.current.currentTime = startSecond;
+    const speedMultiplier  = normalDurationMs / desiredDurationMs;
+    rechargeSound.current.currentTime  = startSecond;
     rechargeSound.current.playbackRate = speedMultiplier;
-    rechargeSound.current.volume = 1.0;
+    rechargeSound.current.volume       = 1.0;
     rechargeSound.current.play().catch(e => console.warn("Áudio bloqueado", e));
     soundTimeout.current = setTimeout(() => {
       rechargeSound.current.pause();
@@ -103,7 +92,7 @@ const ShipDashboard = ({ playerData, onLogout }) => {
     const handleStorageChange = (e) => {
       if (e.key === "heavens_door_ships_db") {
         if (e.newValue) {
-          const allShips = JSON.parse(e.newValue);
+          const allShips   = JSON.parse(e.newValue);
           setAllShipsList(Object.values(allShips));
           const updatedShip = allShips[playerData.ship];
           if (updatedShip) {
@@ -139,10 +128,11 @@ const ShipDashboard = ({ playerData, onLogout }) => {
       const data = e.detail;
       let overlayText = "";
       let overlayType = "hit";
-      let extraTag = "";
-      let moduleMsg = "";
+      let extraTag    = "";
+      let moduleMsg   = "";
 
       if (data.logText) {
+        // Torretas
         if (data.logText.includes("[MÓDULO:")) {
           const match = data.logText.match(/\[MÓDULO: (.*?)\]/);
           if (match) moduleMsg = match[1];
@@ -153,7 +143,14 @@ const ShipDashboard = ({ playerData, onLogout }) => {
           const match = data.logText.match(/\[MÓDULO DESTRUÍDO: (.*?)\]/);
           if (match) moduleMsg = `${match[1]} DESTRUÍDA`;
         }
-        if (data.logText.includes("EXTREMO")) extraTag = "extremo.";
+        // Escudos
+        else if (data.logText.includes("[ESCUDO: AVARIADOS]")) {
+          moduleMsg = "⚡ ESCUDOS AVARIADOS";
+        } else if (data.logText.includes("[ESCUDO: DESTRUÍDOS]")) {
+          moduleMsg = "💀 ESCUDOS DESTRUÍDOS";
+        }
+
+        if (data.logText.includes("EXTREMO"))  extraTag = "extremo.";
         else if (data.logText.includes("CRÍTICO")) extraTag = "crítico.";
       }
 
@@ -232,6 +229,8 @@ const ShipDashboard = ({ playerData, onLogout }) => {
             if (data.logText.includes("[MÓDULO:")) { const m = data.logText.match(/\[MÓDULO: (.*?)\]/); if (m) moduleMsg = m[1]; }
             else if (data.logText.includes("[AVARIA:")) { const m = data.logText.match(/\[AVARIA: (.*?)\]/); if (m) moduleMsg = `${m[1]} AVARIADA`; }
             else if (data.logText.includes("[MÓDULO DESTRUÍDO:")) { const m = data.logText.match(/\[MÓDULO DESTRUÍDO: (.*?)\]/); if (m) moduleMsg = `${m[1]} DESTRUÍDA`; }
+            else if (data.logText.includes("[ESCUDO: AVARIADOS]")) { moduleMsg = "⚡ ESCUDOS AVARIADOS"; }
+            else if (data.logText.includes("[ESCUDO: DESTRUÍDOS]")) { moduleMsg = "💀 ESCUDOS DESTRUÍDOS"; }
             if (data.logText.includes("EXTREMO")) extraTag = "EXTREMO.";
             else if (data.logText.includes("CRÍTICO")) extraTag = "CRÍTICO.";
           }
@@ -248,7 +247,10 @@ const ShipDashboard = ({ playerData, onLogout }) => {
         const allShips = JSON.parse(e.newValue);
         setAllShipsList(Object.values(allShips));
         const updatedShip = allShips[playerData.ship];
-        if (updatedShip) setAttributes(updatedShip.attributes);
+        if (updatedShip) {
+          setAttributes(updatedShip.attributes);
+          setShipDataState(updatedShip);
+        }
       }
     };
     window.addEventListener('storage', handleStorageChange);
@@ -267,10 +269,8 @@ const ShipDashboard = ({ playerData, onLogout }) => {
   const handleManualSync = () => {
     if (currentRole === "piloto" || currentRole === "copiloto") {
       updateShipAttributes(playerData.ship, attributes);
-      
-      // NOVO: Reproduz o som de confirmação
       if (confirmSound.current) {
-        confirmSound.current.currentTime = 0; // Reinicia o som caso clique rápido
+        confirmSound.current.currentTime = 0;
         confirmSound.current.volume = 1.0;
         confirmSound.current.play().catch(e => console.warn("Áudio bloqueado pelo navegador:", e));
       }
@@ -294,9 +294,7 @@ const ShipDashboard = ({ playerData, onLogout }) => {
       showConfirm({
         title: "SISTEMA EM RECARGA",
         message: `Aguarde ${shipInfo.missileCooldown} turno(s) global(is) para disparar mísseis novamente.`,
-        variant: "warning",
-        confirmLabel: "ENTENDIDO",
-        onConfirm: closeConfirm,
+        variant: "warning", confirmLabel: "ENTENDIDO", onConfirm: closeConfirm,
       });
       return;
     }
@@ -312,79 +310,54 @@ const ShipDashboard = ({ playerData, onLogout }) => {
           showConfirm({
             title: "SISTEMA OFFLINE",
             message: "Sistema de Mísseis offline. Não há tripulação operacional na Torreta Central para operar a mira.",
-            variant: "danger",
-            confirmLabel: "ENTENDIDO",
-            onConfirm: closeConfirm,
+            variant: "danger", confirmLabel: "ENTENDIDO", onConfirm: closeConfirm,
           });
           return;
         }
 
         if (centerTurret.missileTarget !== attackTarget) {
-          centerTurret.missileTarget = attackTarget;
-          centerTurret.missileReady = false;
-          centerTurret.missileLockLevel = 0; // GARANTE QUE INICIA EM 0
+          centerTurret.missileTarget    = attackTarget;
+          centerTurret.missileReady     = false;
+          centerTurret.missileLockLevel = 0;
           updateShipConfig(playerData.ship, { activeCrew: myShip.activeCrew });
-          
-          // CORREÇÃO: Atualiza a tela instantaneamente
-          window.dispatchEvent(new StorageEvent('storage', {
-            key: 'heavens_door_ships_db',
-            newValue: JSON.stringify(getAllShips())
-          }));
-
+          window.dispatchEvent(new StorageEvent('storage', { key: 'heavens_door_ships_db', newValue: JSON.stringify(getAllShips()) }));
           setShowAttackModal(false);
           showConfirm({
             title: "MIRA INICIADA",
             message: "Aguarde o Mestre passar 1 Turno Global para concluir o cálculo de trajetória.",
             subtext: "SISTEMA DE GUIAGEM ATIVO",
-            variant: "warning",
-            confirmLabel: "ENTENDIDO",
-            onConfirm: closeConfirm,
+            variant: "warning", confirmLabel: "ENTENDIDO", onConfirm: closeConfirm,
           });
           return;
         } else if (!centerTurret.missileReady) {
           showConfirm({
             title: "MIRA NÃO PRONTA",
             message: "O sistema de guiagem ainda está calculando a trajetória. O Mestre precisa passar o Turno Global.",
-            variant: "warning",
-            confirmLabel: "AGUARDAR",
-            onConfirm: closeConfirm,
+            variant: "warning", confirmLabel: "AGUARDAR", onConfirm: closeConfirm,
           });
           return;
         } else {
-          // --- O JOGADOR ESTÁ ATIRANDO! ---
-          centerTurret.missileTarget = null;
-          centerTurret.missileReady = false;
-          centerTurret.missileLockLevel = 0; // <--- ADICIONE ESTA LINHA AQUI!
-          
+          centerTurret.missileTarget    = null;
+          centerTurret.missileReady     = false;
+          centerTurret.missileLockLevel = 0;
           updateShipConfig(playerData.ship, { activeCrew: myShip.activeCrew, missileCooldown: 2 });
         }
       }
     }
 
     const currentWeaponEffect = getEffect(shipInfo.shipClass, attackWeaponType, attributes[attackWeaponType]);
-  
-  // ADICIONE ESTA CONSTANTE:
-  const isMissileAttack = attackWeaponType === "missiles";
-  
-  // PASSE A CONSTANTE COMO O SEXTO PARÂMETRO:
-processPlayerAttack(
-  playerData.ship,
-  attackTarget,
-  attackDamage,
-  isExtremo,
-  currentWeaponEffect,
-  isMissileAttack
-);
+    const isMissileAttack     = attackWeaponType === "missiles";
 
-// FORÇA ATUALIZAÇÃO LOCAL
-const updatedShip = getShipData(playerData.ship);
-setShipDataState(updatedShip);
+    processPlayerAttack(playerData.ship, attackTarget, attackDamage, isExtremo, currentWeaponEffect, isMissileAttack);
 
-setShowAttackModal(false);
-setAttackTarget("");
-setAttackDamage("");
-setIsExtremo(false);
-};
+    const updatedShip = getShipData(playerData.ship);
+    setShipDataState(updatedShip);
+
+    setShowAttackModal(false);
+    setAttackTarget("");
+    setAttackDamage("");
+    setIsExtremo(false);
+  };
 
   const handleCancelMissileLock = () => {
     const currentShips = getAllShips();
@@ -392,40 +365,38 @@ setIsExtremo(false);
     if (myShip && myShip.activeCrew) {
       const turret = myShip.activeCrew.find(m => m.function.includes("CENTRO"));
       if (turret) {
-        turret.missileTarget = null;
-        turret.missileReady = false;
+        turret.missileTarget    = null;
+        turret.missileReady     = false;
         turret.missileLockLevel = 0;
         updateShipConfig(playerData.ship, { activeCrew: myShip.activeCrew });
-        
-        // CORREÇÃO: Força a atualização da própria tela imediatamente!
-        window.dispatchEvent(new StorageEvent('storage', {
-          key: 'heavens_door_ships_db',
-          newValue: JSON.stringify(getAllShips())
-        }));
-
+        window.dispatchEvent(new StorageEvent('storage', { key: 'heavens_door_ships_db', newValue: JSON.stringify(getAllShips()) }));
         setShowAttackModal(false);
-        setAttackTarget(""); 
+        setAttackTarget("");
       }
     }
   };
 
   const centerTurret = shipDataState?.activeCrew?.find(m => {
-     if (shipDataState.crew && shipDataState.crew.torretas) {
-         const torreta = shipDataState.crew.torretas.find(t => m.function.includes(t.id.toUpperCase()));
-         return torreta && torreta.capabilities.includes("Míssil");
-     }
-     return false;
+    if (shipDataState.crew && shipDataState.crew.torretas) {
+      const torreta = shipDataState.crew.torretas.find(t => m.function.includes(t.id.toUpperCase()));
+      return torreta && torreta.capabilities.includes("Míssil");
+    }
+    return false;
   });
   const lockLevel = centerTurret?.missileLockLevel || 0;
 
-  const maxAttrs = getShipMaxAttributes(shipDataState); // Busca os limites de acordo com a avaria
+  const maxAttrs = getShipMaxAttributes(shipDataState);
+
+  // ─── Estado de escudos da nave do jogador ─────────────────────────────────
+  const shieldStatus = shipDataState?.shieldStatus || 'operacional';
+  const shieldTurnos = shipDataState?.shieldTurnosParaReparo || 0;
 
   const renderBars = (attributeName, currentLevel) => {
     const maxAllowed = maxAttrs[attributeName];
 
     return Array.from({ length: 6 }).map((_, idx) => {
       const targetLevel = idx + 1;
-      const isActive = idx < currentLevel;
+      const isActive  = idx < currentLevel;
       const isBlocked = targetLevel > maxAllowed;
 
       return (
@@ -435,9 +406,9 @@ setIsExtremo(false);
           title={isBlocked ? "SISTEMA AVARIADO - BLOQUEADO" : ""}
           onClick={(e) => {
             e.stopPropagation();
-            if (!canEdit(currentRole) || isBlocked) return; // Bloqueia o clique se estiver avariado
+            if (!canEdit(currentRole) || isBlocked) return;
 
-            let newLevel = targetLevel;
+            let newLevel   = targetLevel;
             if (targetLevel === currentLevel) newLevel = currentLevel - 1;
             const difference = newLevel - currentLevel;
 
@@ -460,17 +431,14 @@ setIsExtremo(false);
     });
   };
 
-  // Nomes dos atributos
   const attrNames = { weapons: "Armas", missiles: "Mísseis", controls: "Controles", shields: "Escudos", engines: "Motores" };
   const attrShort = { weapons: "ARM", missiles: "MSL", controls: "CON", shields: "ESC", engines: "MOT" };
 
   const targetShip = allShipsList.find(s => s.id === attackTarget);
-
-  const isCurrentlyAiming = attackWeaponType === "missiles" && centerTurret && centerTurret.missileTarget;  
-  // ADICIONE ESTAS 3 LINHAS:
-  const isMissileReady = attackWeaponType === "missiles" && isCurrentlyAiming && centerTurret.missileReady;
-  const showDamageFields = attackWeaponType === "weapons" || isMissileReady;
-  const isAimingWait = isCurrentlyAiming && !isMissileReady;
+  const isCurrentlyAiming = attackWeaponType === "missiles" && centerTurret && centerTurret.missileTarget;
+  const isMissileReady    = attackWeaponType === "missiles" && isCurrentlyAiming && centerTurret.missileReady;
+  const showDamageFields  = attackWeaponType === "weapons" || isMissileReady;
+  const isAimingWait      = isCurrentlyAiming && !isMissileReady;
 
   return (
     <div className="dashboard">
@@ -498,21 +466,11 @@ setIsExtremo(false);
               </>
             )}
             <span className="logout-text">TRIPULACAO</span>
-            <button
-              onClick={() => setShowAssignCrew(true)}
-              className="logout-button"
-              title="Assign Crew"
-              style={{ fontSize: "0.6rem", letterSpacing: "1px", width: "auto", padding: "0 0.75rem" }}
-            >
+            <button onClick={() => setShowAssignCrew(true)} className="logout-button" title="Assign Crew" style={{ fontSize: "0.6rem", letterSpacing: "1px", width: "auto", padding: "0 0.75rem" }}>
               X
             </button>
             <span className="logout-text">DESTREZA</span>
-            <button
-              onClick={() => setShowDexterityModal(true)}
-              className="logout-button"
-              title="Ranking Geral"
-              style={{ fontSize: "0.6rem", letterSpacing: "1px", width: "auto", padding: "0 0.75rem" }}
-            >
+            <button onClick={() => setShowDexterityModal(true)} className="logout-button" title="Ranking Geral" style={{ fontSize: "0.6rem", letterSpacing: "1px", width: "auto", padding: "0 0.75rem" }}>
               Y
             </button>
             <span className="logout-text">deslogar</span>
@@ -547,9 +505,27 @@ setIsExtremo(false);
                 <div key={name} className="control-slot">
                   <div className="control-slot-label">{attrShort[name]}</div>
                   <div className="control-slot-bars">{renderBars(name, value)}</div>
+
+                  {/* ─── BOLINHAS DE AVARIA DOS ESCUDOS ─────────────────── */}
+                  {name === "shields" && shieldStatus !== 'operacional' && (
+                    <div className="shield-damage-indicator">
+                      {/* 2 bolinhas = avariado; 3 bolinhas = destruído */}
+                      {Array.from({ length: shieldTurnos }).map((_, i) => (
+                        <span
+                          key={i}
+                          className={`shield-dmg-dot ${shieldStatus === 'destruida' ? 'destroyed' : 'damaged'}`}
+                          title={`Escudos ${shieldStatus} — ${shieldTurnos} turno(s)`}
+                        />
+                      ))}
+                      <span className={`shield-dmg-label ${shieldStatus === 'destruida' ? 'destroyed' : 'damaged'}`}>
+                        {shieldStatus === 'destruida' ? 'OFFLINE' : 'AVARIADO'}
+                      </span>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
+
             <div className="ship-display">
               {(() => {
                 const TOTAL_SELECTABLE_POINTS = shipInfo.totalPoints;
@@ -637,15 +613,11 @@ setIsExtremo(false);
         </>
       )}
 
-      {/* ─── MODAL DE ATAQUE REDESENHADO ─── */}
+      {/* MODAL DE ATAQUE */}
       {showAttackModal && (
         <div className="assign-overlay" onClick={() => setShowAttackModal(false)}>
           <div className="attack-modal" onClick={e => e.stopPropagation()}>
-
-            {/* Linha de scan */}
             <div className="attack-modal__scanline" />
-
-            {/* Header */}
             <div className="attack-modal__header">
               <div className="attack-modal__header-left">
                 <div className="attack-modal__alert-dot" />
@@ -657,56 +629,41 @@ setIsExtremo(false);
               <button className="attack-modal__close" onClick={() => setShowAttackModal(false)}>×</button>
             </div>
 
-            {/* Seletor de arma */}
-            {/* Seletor de arma */}
-<div className="attack-modal__weapon-row">
-  {/* REINSERIR ESTE BLOCO: Botão Balístico */}
-  <button
-    className={`attack-modal__weapon-btn ${attackWeaponType === "weapons" ? "active" : ""}`}
-    onClick={() => setAttackWeaponType("weapons")}
-  >
-    <span className="attack-modal__weapon-icon">⬡</span>
-    <span className="attack-modal__weapon-label">Balístico</span>
-    <span className="attack-modal__weapon-dmg">
-      {getEffect(shipInfo.shipClass, "weapons", attributes["weapons"])}
-    </span>
-  </button>
+            <div className="attack-modal__weapon-row">
+              <button
+                className={`attack-modal__weapon-btn ${attackWeaponType === "weapons" ? "active" : ""}`}
+                onClick={() => setAttackWeaponType("weapons")}
+              >
+                <span className="attack-modal__weapon-icon">⬡</span>
+                <span className="attack-modal__weapon-label">Balístico</span>
+                <span className="attack-modal__weapon-dmg">{getEffect(shipInfo.shipClass, "weapons", attributes["weapons"])}</span>
+              </button>
 
-  {/* Botão de Míssil (Mantenha o que já existe) */}
-  <button
-    className={`attack-modal__weapon-btn ${attackWeaponType === "missiles" ? "active" : ""} ${shipInfo.missileCooldown > 0 ? "cooldown" : ""}`}
-    onClick={() => setAttackWeaponType("missiles")}
-  >
-    <span className="attack-modal__weapon-icon">◈</span>
-    <span className="attack-modal__weapon-label">
-      Míssil {shipInfo.missileCooldown > 0 && <span className="attack-modal__cooldown-badge">{shipInfo.missileCooldown}T</span>}
-    </span>
-    
-    {/* Indicador de Trava */}
-    <div className="attack-modal__lock-indicator">
-      LOCK:
-      <span className={`am-lock-box ${lockLevel >= 1 ? 'filled' : ''}`}></span>
-      <span className={`am-lock-box ${lockLevel >= 2 ? 'filled' : ''}`}></span>
-      <span className={`am-lock-box ${lockLevel >= 3 ? 'filled blink-red' : ''}`}></span>
-    </div>
+              <button
+                className={`attack-modal__weapon-btn ${attackWeaponType === "missiles" ? "active" : ""} ${shipInfo.missileCooldown > 0 ? "cooldown" : ""}`}
+                onClick={() => setAttackWeaponType("missiles")}
+              >
+                <span className="attack-modal__weapon-icon">◈</span>
+                <span className="attack-modal__weapon-label">
+                  Míssil {shipInfo.missileCooldown > 0 && <span className="attack-modal__cooldown-badge">{shipInfo.missileCooldown}T</span>}
+                </span>
+                <div className="attack-modal__lock-indicator">
+                  LOCK:
+                  <span className={`am-lock-box ${lockLevel >= 1 ? 'filled' : ''}`}></span>
+                  <span className={`am-lock-box ${lockLevel >= 2 ? 'filled' : ''}`}></span>
+                  <span className={`am-lock-box ${lockLevel >= 3 ? 'filled blink-red' : ''}`}></span>
+                </div>
+                <span className="attack-modal__weapon-dmg">{getEffect(shipInfo.shipClass, "missiles", attributes["missiles"])}</span>
+              </button>
+            </div>
 
-    <span className="attack-modal__weapon-dmg">
-      {getEffect(shipInfo.shipClass, "missiles", attributes["missiles"])}
-    </span>
-  </button>
-</div>
-
-            {/* NOVO: ALERTA DE VANTAGEM NO DANO ROLADO */}
             {attackWeaponType === "missiles" && lockLevel >= 2 && (
               <div className="attack-modal__advantage-alert">
-                 {lockLevel === 2 ? "VANTAGEM: ROLE 2d100" : "SUPER VANTAGEM: ROLE 3d100"} E USE O MENOR VALOR!
+                {lockLevel === 2 ? "VANTAGEM: ROLE 2d100" : "SUPER VANTAGEM: ROLE 3d100"} E USE O MENOR VALOR!
               </div>
             )}
 
-            {/* Corpo */}
             <div className="attack-modal__body">
-
-              {/* Alvo */}
               <div className="attack-modal__field">
                 <label className="attack-modal__field-label">
                   <span className="attack-modal__field-num">01</span> Selecionar Alvo
@@ -727,7 +684,6 @@ setIsExtremo(false);
                     ))}
                 </select>
 
-                {/* Info do alvo selecionado */}
                 {targetShip && (
                   <div className="attack-modal__target-info">
                     <div className="attack-modal__target-row">
@@ -742,15 +698,23 @@ setIsExtremo(false);
                     </div>
                     <div className="attack-modal__target-row">
                       <span className="attack-modal__target-key">ESCUDO</span>
-                      <span className="attack-modal__target-val">
+                      <span
+                        className="attack-modal__target-val"
+                        style={{
+                          color: (targetShip.shieldStatus === 'destruida') ? '#ff3c1e'
+                               : (targetShip.shieldStatus === 'avariada')  ? '#ffae00'
+                               : undefined
+                        }}
+                      >
                         {getEffect(targetShip.shipClass, "shields", targetShip.attributes?.shields ?? 0)}
+                        {targetShip.shieldStatus === 'avariada'  && ' ⚡'}
+                        {targetShip.shieldStatus === 'destruida' && ' 💀'}
                       </span>
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* Extremo */}
               {showDamageFields && (
                 <div className="attack-modal__field">
                   <label className="attack-modal__field-label">
@@ -768,9 +732,9 @@ setIsExtremo(false);
                       <div className="attack-modal__extremo-sub">Dano máximo automático — sem rolagem</div>
                     </div>
                   </label>
-                </div> )}
+                </div>
+              )}
 
-              {/* Dano rolado */}
               {showDamageFields && !isExtremo && (
                 <div className="attack-modal__field">
                   <label className="attack-modal__field-label">
@@ -786,7 +750,6 @@ setIsExtremo(false);
                 </div>
               )}
 
-              {/* Preview de dano */}
               <div className="attack-modal__damage-preview">
                 <div className="attack-modal__damage-label">POTENCIAL DE DANO</div>
                 <div className="attack-modal__damage-value">
@@ -795,7 +758,6 @@ setIsExtremo(false);
               </div>
             </div>
 
-            {/* Footer */}
             <div className="attack-modal__footer" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <button
                 className="attack-modal__fire-btn"
@@ -803,7 +765,7 @@ setIsExtremo(false);
                 disabled={(!isCurrentlyAiming && !attackTarget) || (showDamageFields && !isExtremo && !attackDamage) || isAimingWait}
               >
                 <span>
-                  {attackWeaponType === "missiles" 
+                  {attackWeaponType === "missiles"
                     ? (!isCurrentlyAiming ? "INICIAR MIRA" : (isMissileReady ? "DISPARAR MÍSSIL" : "MIRANDO... (AGUARDE)"))
                     : "CONFIRMAR DISPARO"}
                 </span>
@@ -812,7 +774,6 @@ setIsExtremo(false);
                 </svg>
               </button>
 
-              {/* Botão de cancelar a mira travada, só aparece se estiver mirando */}
               {isCurrentlyAiming && (
                 <button
                   className="attack-modal__fire-btn"
@@ -824,7 +785,6 @@ setIsExtremo(false);
               )}
             </div>
 
-            {/* Cantos HUD */}
             <div className="attack-modal__corner attack-modal__corner--tl" />
             <div className="attack-modal__corner attack-modal__corner--tr" />
             <div className="attack-modal__corner attack-modal__corner--bl" />
@@ -888,7 +848,6 @@ setIsExtremo(false);
         </div>
       )}
 
-      {/* Modal de confirmação customizado */}
       <ConfirmModal
         isOpen={confirmState.isOpen}
         title={confirmState.title}
