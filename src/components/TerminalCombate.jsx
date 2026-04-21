@@ -4,9 +4,12 @@ import {
   updateShipConfig,
   applyModuleDamage,
   applyShieldDamage,
+  applyEnginesDamage,
   selectDamageTarget,
   processGlobalTurn,
   incrementMissileLock,
+  incrementBallisticLock,
+  isBallisticLockEligible,
   getShipMaxAttributes,
   enforceAttributeLimits
 } from "../utils/mockApi";
@@ -22,6 +25,7 @@ const canFire = (member, shipClass) => {
   if (shipClass === "type_III" && member.role === "copiloto") return false;
   return true;
 };
+
 const usesMissiles = (member, shipClass) =>
   shipClass !== "type_II" && member.function.includes("CENTRO");
 
@@ -45,22 +49,31 @@ const getPrecisao = (member) =>
 
 const CrewSlot = ({ member, attackerShip, allShips, onFire }) => {
   const [open, setOpen] = useState(false);
-  const [targetId, setTargetId] = useState(member.missileTarget || "");
+  const [targetId, setTargetId] = useState("");
 
+  // Sincroniza o targetId com o alvo salvo (míssil ou balístico)
   useEffect(() => {
-    if (member.missileTarget) setTargetId(member.missileTarget);
-  }, [member.missileTarget]);
-
-  const isMissileLocked = member.missileTarget === targetId;
-  const isMissileReady  = member.missileReady;
+    if (member.missileTarget)   setTargetId(member.missileTarget);
+    else if (member.ballisticTarget) setTargetId(member.ballisticTarget);
+  }, [member.missileTarget, member.ballisticTarget]);
 
   const fires    = canFire(member, attackerShip.shipClass);
   const missiles = usesMissiles(member, attackerShip.shipClass);
-  const precisao = getPrecisao(member);
+  const usesBallistic = isBallisticLockEligible(member, attackerShip);
 
-  const status       = member.moduleStatus || 'operacional';
-  const turnos       = member.turnosParaReparo || 0;
+  const precisao    = getPrecisao(member);
+  const status      = member.moduleStatus || 'operacional';
+  const turnos      = member.turnosParaReparo || 0;
   const isOperacional = status === 'operacional';
+
+  // ── Estado do lock de míssil ──
+  const missileLockLevel   = member.missileLockLevel   || 0;
+  const isMissileAiming    = !!member.missileTarget;
+  const isMissileReady     = member.missileReady;
+
+  // ── Estado do lock balístico ──
+  const ballisticLockLevel = member.ballisticLockLevel || 0;
+  const isBallisticAiming  = !!member.ballisticTarget;
 
   const targetOptions = Object.values(allShips)
     .filter((s) => s.id !== attackerShip.id && s.status !== "desativada" && s.status !== "destruida")
@@ -75,7 +88,40 @@ const CrewSlot = ({ member, attackerShip, allShips, onFire }) => {
     setTargetId("");
   };
 
-  const lockLevel = member.missileLockLevel || 0;
+  const handleCancelBallistic = () => {
+    setOpen(false);
+    setTargetId("");
+    const ships = getAllShips();
+    const ship  = ships[attackerShip.id];
+    const crewMember = ship?.activeCrew?.find(m => m.id === member.id);
+    if (crewMember) {
+      crewMember.ballisticTarget    = null;
+      crewMember.ballisticLockLevel = 0;
+      localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
+    }
+  };
+
+  // ── Label e comportamento do botão de disparo ──
+  const getFireLabel = () => {
+    if (missiles) {
+      if (!isMissileAiming) return "MIRAR MÍSSIL";
+      if (!isMissileReady)  return "MIRANDO...";
+      return "DISPARAR MÍSSIL";
+    }
+    if (usesBallistic) {
+      if (!isBallisticAiming)         return "MIRAR BALÍSTICO";
+      if (ballisticLockLevel < 3)     return `MIRANDO... (${ballisticLockLevel}/3)`;
+      return "DISPARAR";
+    }
+    return "DISPARAR";
+  };
+
+  const isFireDisabled = () => {
+    if (!targetId) return true;
+    // Míssil: bloqueado enquanto não estiver pronto
+    if (missiles && isMissileAiming && !isMissileReady) return true;
+    return false;
+  };
 
   return (
     <div className={`tc-crew-slot ${slotClass(member.role)} ${open ? "is-open" : ""}`}>
@@ -110,12 +156,23 @@ const CrewSlot = ({ member, attackerShip, allShips, onFire }) => {
         </span>
       </div>
 
+      {/* ── Indicador de lock MÍSSIL ── */}
       {missiles && (
         <div className="tc-missile-lock-indicator">
-          <span className="tc-lock-label">LOCK:</span>
-          <span className={`tc-lock-box ${lockLevel >= 1 ? 'filled' : ''}`}></span>
-          <span className={`tc-lock-box ${lockLevel >= 2 ? 'filled' : ''}`}></span>
-          <span className={`tc-lock-box ${lockLevel >= 3 ? 'filled blink-red' : ''}`}></span>
+          <span className="tc-lock-label">LOCK MSL:</span>
+          <span className={`tc-lock-box ${missileLockLevel >= 1 ? 'filled' : ''}`}></span>
+          <span className={`tc-lock-box ${missileLockLevel >= 2 ? 'filled' : ''}`}></span>
+          <span className={`tc-lock-box ${missileLockLevel >= 3 ? 'filled blink-red' : ''}`}></span>
+        </div>
+      )}
+
+      {/* ── Indicador de lock BALÍSTICO (amarelo-esverdeado) ── */}
+      {usesBallistic && (
+        <div className="tc-ballistic-lock-indicator">
+          <span className="tc-lock-label tc-lock-label--ballistic">LOCK BAL:</span>
+          <span className={`tc-lock-box tc-lock-box--ballistic ${ballisticLockLevel >= 1 ? 'filled' : ''}`}></span>
+          <span className={`tc-lock-box tc-lock-box--ballistic ${ballisticLockLevel >= 2 ? 'filled' : ''}`}></span>
+          <span className={`tc-lock-box tc-lock-box--ballistic ${ballisticLockLevel >= 3 ? 'filled blink-green' : ''}`}></span>
         </div>
       )}
 
@@ -135,6 +192,7 @@ const CrewSlot = ({ member, attackerShip, allShips, onFire }) => {
             className="tc-target-select"
             value={targetId}
             onChange={(e) => setTargetId(e.target.value)}
+            disabled={(missiles && isMissileAiming) || (usesBallistic && isBallisticAiming)}
           >
             <option value="">— Selecionar Alvo —</option>
             {targetOptions.map((s) => (
@@ -150,31 +208,39 @@ const CrewSlot = ({ member, attackerShip, allShips, onFire }) => {
               onClick={() => {
                 setOpen(false);
                 setTargetId("");
+                // Cancela lock de míssil se existir
                 if (member.missileTarget) {
                   const ships = getAllShips();
                   const ship  = ships[attackerShip.id];
-                  const crewMember = ship.activeCrew.find(m => m.id === member.id);
+                  const crewMember = ship?.activeCrew?.find(m => m.id === member.id);
                   if (crewMember) {
-                    crewMember.missileTarget  = null;
+                    crewMember.missileTarget    = null;
                     crewMember.missileLockLevel = 0;
-                    crewMember.missileReady   = false;
+                    crewMember.missileReady     = false;
                     localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
                   }
                 }
+                // Cancela lock balístico se existir
+                if (member.ballisticTarget) handleCancelBallistic();
               }}
             >
               ✕
             </button>
             <button
-              className="tc-fire-btn"
-              disabled={!targetId}
+              className={`tc-fire-btn ${usesBallistic && isBallisticAiming && ballisticLockLevel >= 1 ? 'tc-fire-btn--ballistic-lock' : ''}`}
+              disabled={isFireDisabled()}
               onClick={handleDisparo}
             >
-              {missiles && attackerShip.shipClass !== "type_II" && targetId
-                ? (!isMissileLocked ? "MIRAR MÍSSIL" : (!isMissileReady ? "MIRANDO..." : "DISPARAR MÍSSIL"))
-                : "DISPARAR"}
+              {getFireLabel()}
             </button>
           </div>
+
+          {/* Aviso de vantagem balística */}
+          {usesBallistic && isBallisticAiming && ballisticLockLevel >= 2 && (
+            <div className="tc-ballistic-advantage-alert">
+              {ballisticLockLevel === 2 ? "VANTAGEM: ROLE 2d100" : "SUPER VANTAGEM: ROLE 3d100"} — USE O MENOR!
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -229,15 +295,15 @@ const TacticalCard = ({ ship, allShips, onFire, onUpdate }) => {
   const crew        = ship.activeCrew || [];
   const isDestroyed = ship.currentHP <= 0;
 
-  const shieldStatus = ship.shieldStatus || 'operacional';
-  const shieldTurnos = ship.shieldTurnosParaReparo || 0;
+  const shieldStatus  = ship.shieldStatus  || 'operacional';
+  const shieldTurnos  = ship.shieldTurnosParaReparo  || 0;
+  const enginesStatus = ship.enginesStatus || 'operacional';
+  const enginesTurnos = ship.enginesTurnosParaReparo || 0;
 
   return (
     <div className={`tc-card ${isDestroyed ? "is-destroyed" : ""}`}>
 
-      {isDestroyed && (
-        <div className="tc-card-destroyed-overlay">DESTRUÍDA</div>
-      )}
+      {isDestroyed && <div className="tc-card-destroyed-overlay">DESTRUÍDA</div>}
 
       <div className="tc-card-header">
         <div className="tc-card-header-left">
@@ -248,20 +314,30 @@ const TacticalCard = ({ ship, allShips, onFire, onUpdate }) => {
         </div>
 
         <div className="tc-card-header-right">
-          {/* Indicador de escudos avariados */}
           {shieldStatus !== 'operacional' && (
             <div className="tc-shield-status-badge" title={`Escudos: ${shieldStatus} — ${shieldTurnos} turno(s)`}>
               <span className="tc-shield-icon">🛡</span>
               <div className="tc-shield-dots">
                 {Array.from({ length: shieldTurnos }).map((_, i) => (
-                  <span
-                    key={i}
-                    className={`tc-shield-dot ${shieldStatus === 'destruida' ? 'destroyed' : 'damaged'}`}
-                  />
+                  <span key={i} className={`tc-shield-dot ${shieldStatus === 'destruida' ? 'destroyed' : 'damaged'}`} />
                 ))}
               </div>
               <span className={`tc-shield-label ${shieldStatus === 'destruida' ? 'destroyed' : 'damaged'}`}>
                 {shieldStatus === 'destruida' ? 'OFFLINE' : 'AVARIADO'}
+              </span>
+            </div>
+          )}
+
+          {enginesStatus !== 'operacional' && (
+            <div className="tc-engines-status-badge" title={`Motores: ${enginesStatus} — ${enginesTurnos} turno(s)`}>
+              <span className="tc-engines-icon">⚙</span>
+              <div className="tc-shield-dots">
+                {Array.from({ length: enginesTurnos }).map((_, i) => (
+                  <span key={i} className={`tc-shield-dot ${enginesStatus === 'destruida' ? 'destroyed' : 'damaged'}`} />
+                ))}
+              </div>
+              <span className={`tc-shield-label ${enginesStatus === 'destruida' ? 'destroyed' : 'damaged'}`}>
+                {enginesStatus === 'destruida' ? 'OFFLINE' : 'AVARIADO'}
               </span>
             </div>
           )}
@@ -304,11 +380,12 @@ const TacticalCard = ({ ship, allShips, onFire, onUpdate }) => {
 const CombatLog = ({ entries }) => (
   <div className="tc-log">
     <div className="tc-log-title">// LOG DE COMBATE</div>
-    {entries.length === 0 && (
-      <div className="tc-log-empty">Aguardando ações...</div>
-    )}
+    {entries.length === 0 && <div className="tc-log-empty">Aguardando ações...</div>}
     {[...entries].reverse().map((entry, i) => (
-      <div key={i} className={`tc-log-entry ${entry.hit ? "hit" : "miss"} ${entry.isShield ? "shield-hit" : ""}`}>
+      <div
+        key={i}
+        className={`tc-log-entry ${entry.hit ? "hit" : "miss"} ${entry.isShield ? "shield-hit" : ""} ${entry.isEngines ? "engines-hit" : ""}`}
+      >
         <span className="tc-log-time">[{entry.time}]</span>
         <span className="tc-log-text">{entry.text}</span>
       </div>
@@ -323,17 +400,15 @@ const TerminalCombate = ({ onBack }) => {
   const [activeEnemies, setActiveEnemies] = useState([]);
   const [combatLog,     setCombatLog]     = useState([]);
   const [lastRefresh,   setLastRefresh]   = useState(new Date());
-  const turnSound          = useRef(new Audio('/passarturno.wav'));
+  const turnSound         = useRef(new Audio('/passarturno.wav'));
+  const missileReadySound = useRef(new Audio('/missileready.wav'));
   const [modalConfig, setModalConfig] = useState({ isOpen: false });
   const closeConfirm = () => setModalConfig(prev => ({ ...prev, isOpen: false }));
-  const missileReadySound  = useRef(new Audio('/missileready.wav'));
 
   const refresh = () => {
     const ships = getAllShips();
     setAllShips(ships);
-    setActiveEnemies(
-      Object.values(ships).filter((s) => s.isEnemy && s.status === "ativa")
-    );
+    setActiveEnemies(Object.values(ships).filter((s) => s.isEnemy && s.status === "ativa"));
     setLastRefresh(new Date());
   };
 
@@ -348,7 +423,7 @@ const TerminalCombate = ({ onBack }) => {
     const handlePlayerAttack = (e) => {
       if (e.key === "last_combat_event" && e.newValue) {
         const data = JSON.parse(e.newValue);
-        addLog({ hit: data.damage > 0, text: data.logText, isShield: data.shieldHit });
+        addLog({ hit: data.damage > 0, text: data.logText, isShield: data.shieldHit, isEngines: data.enginesHit });
         refresh();
       }
       if (e.key === "heavens_door_ships_db") refresh();
@@ -363,49 +438,84 @@ const TerminalCombate = ({ onBack }) => {
     const ships  = getAllShips();
     const target = ships[targetId];
 
-    // Garante campos de escudo no alvo
-    if (!target.shieldStatus) target.shieldStatus = 'operacional';
-    if (target.shieldTurnosParaReparo === undefined) target.shieldTurnosParaReparo = 0;
+    if (!target.shieldStatus)  target.shieldStatus  = 'operacional';
+    if (target.shieldTurnosParaReparo  === undefined) target.shieldTurnosParaReparo  = 0;
+    if (!target.enginesStatus) target.enginesStatus = 'operacional';
+    if (target.enginesTurnosParaReparo === undefined) target.enginesTurnosParaReparo = 0;
 
-    if (missiles && attackerShip.missileCooldown > 0) {
-      addLog({ hit: false, text: `⏳ ${attackerShip.name}: Sistemas de mísseis em recarga (${attackerShip.missileCooldown}t restantes).` });
-      return;
-    }
+    const attackerCrewMember = ships[attackerShip.id].activeCrew.find(m => m.id === member.id);
 
-    if (missiles && attackerShip.shipClass !== "type_II") {
-      const attackerCrewMember = ships[attackerShip.id].activeCrew.find(m => m.id === member.id);
-
-      if (attackerCrewMember.missileTarget !== targetId) {
-        attackerCrewMember.missileTarget    = targetId;
-        attackerCrewMember.missileReady     = false;
-        attackerCrewMember.missileLockLevel = 0;
-        localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
-        addLog({ hit: false, text: `⚠️ ${attackerShip.name} iniciou travamento de mira em ${target.name}!` });
-        refresh();
+    // ── FLUXO DE MÍSSIL ──────────────────────────────────────────────────────
+    if (missiles) {
+      if (attackerShip.missileCooldown > 0) {
+        addLog({ hit: false, text: `⏳ ${attackerShip.name}: Sistemas de mísseis em recarga (${attackerShip.missileCooldown}t restantes).` });
         return;
-      } else if (!attackerCrewMember.missileReady) {
-        addLog({ hit: false, text: `⏳ ${attackerShip.name} ainda está calculando a mira. Aguarde o Turno Global.` });
-        return;
+      }
+
+      if (attackerShip.shipClass !== "type_II") {
+        if (attackerCrewMember.missileTarget !== targetId) {
+          attackerCrewMember.missileTarget    = targetId;
+          attackerCrewMember.missileReady     = false;
+          attackerCrewMember.missileLockLevel = 0;
+          localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
+          addLog({ hit: false, text: `⚠️ ${attackerShip.name} iniciou travamento de mira de MÍSSIL em ${target.name}!` });
+          refresh();
+          return;
+        }
+        if (!attackerCrewMember.missileReady) {
+          addLog({ hit: false, text: `⏳ ${attackerShip.name}: mira de míssil ainda calculando. Aguarde o Turno Global.` });
+          return;
+        }
       }
     }
 
-    const precisao       = member.precisao || 50;
-    const weaponLabel    = missiles ? "Mísseis" : "Armas";
-    const attrLevel      = attackerShip.attributes[missiles ? "missiles" : "weapons"];
-    const effectStr      = getEffect(attackerShip.shipClass, missiles ? "missiles" : "weapons", attrLevel);
-    const attackerCrewMember = ships[attackerShip.id].activeCrew.find(m => m.id === member.id);
-    const lockLevel      = attackerCrewMember.missileLockLevel || 0;
-    let advantageLevel   = 1;
+    // ── FLUXO BALÍSTICO COM LOCK ──────────────────────────────────────────────
+    const hasBallistic = isBallisticLockEligible(member, attackerShip);
+    if (!missiles && hasBallistic) {
+      if (!attackerCrewMember.ballisticTarget) {
+        // Inicia mira — primeiro clique em "MIRAR BALÍSTICO"
+        attackerCrewMember.ballisticTarget    = targetId;
+        attackerCrewMember.ballisticLockLevel = 0;
+        localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
+        addLog({ hit: false, text: `🎯 ${attackerShip.name} - ${member.function} iniciou mira balística em ${target.name}!` });
+        refresh();
+        return;
+      }
+      // Se mudou de alvo, reinicia o lock
+      if (attackerCrewMember.ballisticTarget !== targetId) {
+        attackerCrewMember.ballisticTarget    = targetId;
+        attackerCrewMember.ballisticLockLevel = 0;
+        localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
+        addLog({ hit: false, text: `🎯 ${attackerShip.name} - ${member.function} redirecionou mira balística para ${target.name}!` });
+        refresh();
+        return;
+      }
+      // Tem lock — prossegue para o cálculo de dano normalmente abaixo
+    }
 
+    // ── CÁLCULO DE PRECISÃO E VANTAGEM ───────────────────────────────────────
+    const precisao   = member.precisao || 50;
+    const attrLevel  = attackerShip.attributes[missiles ? "missiles" : "weapons"];
+    const effectStr  = getEffect(attackerShip.shipClass, missiles ? "missiles" : "weapons", attrLevel);
+    const weaponLabel = missiles ? "Mísseis" : "Armas";
+
+    // Vantagem: míssil usa missileLockLevel, balístico usa ballisticLockLevel
+    const missileLockLevel   = attackerCrewMember.missileLockLevel   || 0;
+    const ballisticLockLevel = attackerCrewMember.ballisticLockLevel || 0;
+
+    let advantageLevel = 1;
     if (missiles) {
-      if (lockLevel === 2) advantageLevel = 2;
-      if (lockLevel >= 3) advantageLevel = 3;
+      if (missileLockLevel === 2)   advantageLevel = 2;
+      if (missileLockLevel >= 3)    advantageLevel = 3;
+    } else if (hasBallistic) {
+      if (ballisticLockLevel === 2) advantageLevel = 2;
+      if (ballisticLockLevel >= 3)  advantageLevel = 3;
     }
 
     const { acertou, isExtremo, rolou, allRolls } = rollHit(precisao, advantageLevel);
 
     if (!acertou) {
-      const logRolls = missiles && advantageLevel > 1 ? `[${allRolls.join(', ')}] -> ` : '';
+      const logRolls = advantageLevel > 1 ? `[${allRolls.join(', ')}] -> ` : '';
       const msgFalha = [
         `${member.id} [${weaponLabel} Nv.${attrLevel}: ${effectStr}]`,
         `→ ${target.name}`,
@@ -418,19 +528,25 @@ const TerminalCombate = ({ onBack }) => {
       }));
       addLog({ hit: false, text: msgFalha });
 
+      // Após erro: míssil reseta e entra em cooldown; balístico reseta lock
       if (missiles) {
         attackerCrewMember.missileLockLevel = 0;
         attackerCrewMember.missileTarget    = null;
         attackerCrewMember.missileReady     = false;
         ships[attackerShip.id].missileCooldown = 2;
         localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
+      } else if (hasBallistic) {
+        attackerCrewMember.ballisticLockLevel = 0;
+        attackerCrewMember.ballisticTarget    = null;
+        localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
       }
       return;
     }
 
+    // ── ACERTOU — calcula dano ────────────────────────────────────────────────
     const { total: rawDamage, isCritico, breakdown } = rollDamage(effectStr, isExtremo);
-    const shieldValue  = parseShield(getEffect(target.shipClass, "shields", target.attributes.shields));
-    const finalDamage  = Math.max(0, rawDamage - shieldValue);
+    const shieldValue = parseShield(getEffect(target.shipClass, "shields", target.attributes.shields));
+    const finalDamage = Math.max(0, rawDamage - shieldValue);
 
     const newHP = Math.max(0, target.currentHP - finalDamage);
     updateShipConfig(targetId, { currentHP: newHP });
@@ -450,19 +566,19 @@ const TerminalCombate = ({ onBack }) => {
     }
 
     const tags = [];
-    if (isExtremo)  tags.push("[EXTREMO!]");
-    else if (isCritico) tags.push("[CRÍTICO!]");
+    if (isExtremo)       tags.push("[EXTREMO!]");
+    else if (isCritico)  tags.push("[CRÍTICO!]");
 
-    // ─── Avaria de Módulo com Probabilidade Ponderada ──────────────────────
-    let moduleMsg = "";
-    let moduleTag = "";
-    let isShieldHit = false;
+    let moduleMsg   = "";
+    let moduleTag   = "";
+    let isShieldHit  = false;
+    let isEnginesHit = false;
 
     if ((isCritico || isExtremo) && finalDamage > 0) {
-      // Re-lê o alvo do banco para ter o estado mais recente
-      const freshShips = getAllShips();
+      const freshShips  = getAllShips();
       const freshTarget = freshShips[targetId];
-      if (!freshTarget.shieldStatus) freshTarget.shieldStatus = 'operacional';
+      if (!freshTarget.shieldStatus)  freshTarget.shieldStatus  = 'operacional';
+      if (!freshTarget.enginesStatus) freshTarget.enginesStatus = 'operacional';
 
       const dmgTarget = selectDamageTarget(freshTarget);
 
@@ -471,13 +587,11 @@ const TerminalCombate = ({ onBack }) => {
           const tMember = (freshTarget.activeCrew || []).find(m => m.id === dmgTarget.memberId);
           if (tMember) {
             if (tMember.moduleStatus === 'operacional') {
-              tMember.moduleStatus     = 'avariada';
-              tMember.turnosParaReparo = 2;
+              tMember.moduleStatus = 'avariada'; tMember.turnosParaReparo = 2;
               moduleMsg = `${tMember.function} AVARIADA`;
               moduleTag = `[AVARIA: ${tMember.function}]`;
             } else if (tMember.moduleStatus === 'avariada') {
-              tMember.moduleStatus     = 'destruida';
-              tMember.turnosParaReparo = 0;
+              tMember.moduleStatus = 'destruida'; tMember.turnosParaReparo = 0;
               moduleMsg = `${tMember.function} DESTRUÍDA`;
               moduleTag = `[MÓDULO DESTRUÍDO: ${tMember.function}]`;
             }
@@ -485,30 +599,37 @@ const TerminalCombate = ({ onBack }) => {
         } else if (dmgTarget.tipo === 'escudo') {
           isShieldHit = true;
           if (freshTarget.shieldStatus === 'operacional') {
-            freshTarget.shieldStatus            = 'avariada';
-            freshTarget.shieldTurnosParaReparo  = 2;
+            freshTarget.shieldStatus = 'avariada'; freshTarget.shieldTurnosParaReparo = 2;
             moduleMsg = "ESCUDOS AVARIADOS (nível máx. 2 — 2 turnos)";
             moduleTag = `[ESCUDO: AVARIADOS]`;
           } else if (freshTarget.shieldStatus === 'avariada') {
-            freshTarget.shieldStatus            = 'destruida';
-            freshTarget.shieldTurnosParaReparo  = 3;
+            freshTarget.shieldStatus = 'destruida'; freshTarget.shieldTurnosParaReparo = 3;
             moduleMsg = "ESCUDOS DESTRUÍDOS (offline — 3 turnos)";
             moduleTag = `[ESCUDO: DESTRUÍDOS]`;
           }
+        } else if (dmgTarget.tipo === 'motores') {
+          isEnginesHit = true;
+          if (freshTarget.enginesStatus === 'operacional') {
+            freshTarget.enginesStatus = 'avariada'; freshTarget.enginesTurnosParaReparo = 2;
+            moduleMsg = "MOTORES AVARIADOS (nível máx. 3 — 2 turnos)";
+            moduleTag = `[MOTORES: AVARIADOS]`;
+          } else if (freshTarget.enginesStatus === 'avariada') {
+            freshTarget.enginesStatus = 'destruida'; freshTarget.enginesTurnosParaReparo = 3;
+            moduleMsg = "MOTORES DESTRUÍDOS (offline — 3 turnos)";
+            moduleTag = `[MOTORES: DESTRUÍDOS]`;
+          }
         }
 
-        // APENAS ISTO:
-if (freshTarget.attributes) {
-  // A função enforceAttributeLimits já está importada no topo do arquivo
-  enforceAttributeLimits(freshTarget); 
-}
+        if (freshTarget.attributes) enforceAttributeLimits(freshTarget);
         freshShips[targetId] = freshTarget;
         localStorage.setItem("heavens_door_ships_db", JSON.stringify(freshShips));
       }
     }
 
-    const logRolls      = missiles && advantageLevel > 1 ? `[${allRolls.join(', ')}] -> ` : '';
-    const advantageLabel = advantageLevel === 2 ? " [VANTAGEM]" : advantageLevel === 3 ? " [SUPER VANTAGEM]" : "";
+    const logRolls      = advantageLevel > 1 ? `[${allRolls.join(', ')}] -> ` : '';
+    const advantageLabel =
+      advantageLevel === 2 ? " [VANTAGEM]" :
+      advantageLevel === 3 ? " [SUPER VANTAGEM]" : "";
 
     const msg = [
       `${member.id} [${weaponLabel} Nv.${attrLevel}: ${effectStr}]${advantageLabel}`,
@@ -523,24 +644,36 @@ if (freshTarget.attributes) {
     ].join("  ");
 
     localStorage.setItem("last_combat_event", JSON.stringify({
-      targetName: target.name,
-      damage: finalDamage,
+      targetName: target.name, damage: finalDamage,
       isAbsorbed: rawDamage > 0 && finalDamage === 0,
-      timestamp: Date.now(),
-      logText: msg,
+      timestamp: Date.now(), logText: msg,
       shieldHit: isShieldHit,
-      shieldDestroyed: moduleTag.includes("DESTRUÍDOS"),
+      shieldDestroyed: moduleTag.includes("DESTRUÍDOS") && isShieldHit,
+      enginesHit: isEnginesHit,
+      enginesDestroyed: moduleTag.includes("DESTRUÍDOS") && isEnginesHit,
     }));
 
-    addLog({ hit: true, text: msg, isShield: isShieldHit });
+    addLog({ hit: true, text: msg, isShield: isShieldHit, isEngines: isEnginesHit });
+
+    // ── Limpeza pós-disparo ───────────────────────────────────────────────────
+    // ── Limpeza pós-disparo (CORRIGIDA) ──────────────────────────────────────
+    // Puxamos a cópia mais recente do banco de dados (com HP reduzido e avarias aplicadas)
+    const finalShips = getAllShips();
+    const finalAttackerCrew = finalShips[attackerShip.id].activeCrew.find(m => m.id === member.id);
 
     if (missiles) {
-      attackerCrewMember.missileLockLevel    = 0;
-      attackerCrewMember.missileTarget       = null;
-      attackerCrewMember.missileReady        = false;
-      ships[attackerShip.id].missileCooldown = 2;
-      localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
+      finalAttackerCrew.missileLockLevel    = 0;
+      finalAttackerCrew.missileTarget       = null;
+      finalAttackerCrew.missileReady        = false;
+      finalShips[attackerShip.id].missileCooldown = 2;
+      localStorage.setItem("heavens_door_ships_db", JSON.stringify(finalShips));
+    } else if (hasBallistic) {
+      // Lock balístico reseta após disparo (sem cooldown)
+      finalAttackerCrew.ballisticLockLevel = 0;
+      finalAttackerCrew.ballisticTarget    = null;
+      localStorage.setItem("heavens_door_ships_db", JSON.stringify(finalShips));
     }
+
     refresh();
   };
 
@@ -562,12 +695,18 @@ if (freshTarget.attributes) {
       turnSound.current.play().catch(e => console.warn("Áudio bloqueado:", e));
     }
 
-    const ships   = getAllShips();
-    let alertas   = [];
+    const ships = getAllShips();
+    let alertas = [];
+
     Object.values(ships).forEach(ship => {
       if (ship.status === 'ativa' || !ship.isEnemy) {
-        const alertasNave = incrementMissileLock(ship.id);
-        if (alertasNave && alertasNave.length > 0) alertas.push(...alertasNave);
+        // Lock de míssil
+        const alertasMissile = incrementMissileLock(ship.id);
+        if (alertasMissile?.length) alertas.push(...alertasMissile);
+
+        // Lock balístico — apenas inimigos
+        const alertasBallistic = incrementBallisticLock(ship.id);
+        if (alertasBallistic?.length) alertas.push(...alertasBallistic);
       }
     });
 
@@ -596,7 +735,7 @@ if (freshTarget.attributes) {
           isOpen: true,
           title: "ALERTA TÁTICO",
           message: alertas.join("\n\n"),
-          subtext: "TRAVA MÁXIMA DE MÍSSIL ATINGIDA — LANÇAMENTO IMINENTE",
+          subtext: "TRAVAMENTO DE ARMA ATINGIDO — VERIFICAR SISTEMAS",
           variant: "danger",
           confirmLabel: "CIENTE",
           hideCancel: true,
@@ -627,7 +766,7 @@ if (freshTarget.attributes) {
               Object.values(ships).forEach(s => {
                 if (s.activeCrew) {
                   s.activeCrew.forEach(m => {
-                    if (m.missileLockLevel >= 3) bloqueios.push(`${s.name} (${m.function})`);
+                    if (m.missileLockLevel >= 3) bloqueios.push(`${s.name} (${m.function}) — MÍSSIL`);
                   });
                 }
               });
@@ -653,7 +792,7 @@ if (freshTarget.attributes) {
               setModalConfig({
                 isOpen: true,
                 title: "AVANÇAR TURNO GLOBAL",
-                message: "Deseja processar os cálculos de trajetória, recarga de mísseis e reparos de sistemas para todas as naves?",
+                message: "Deseja processar os cálculos de trajetória, recarga de mísseis, miras balísticas e reparos de sistemas para todas as naves?",
                 subtext: "ESTA AÇÃO É IRREVERSÍVEL",
                 variant: "warning",
                 confirmLabel: "CONFIRMAR TURNO",

@@ -1837,3 +1837,17 @@
  
 .shield-dmg-label.damaged   { color: #b026ff; }
 .shield-dmg-label.destroyed { color: #ff3c1e; }
+
+/* Bolinhas laranja de avaria dos motores (mesmo padrão do escudo) */
+.shield-dmg-dot.damaged-engines {
+  background: #ff8c00;
+  box-shadow: 0 0 6px #ff8c00;
+  animation: pulse-shield-dmg-orange 1.4s ease-in-out infinite alternate;
+}
+ 
+@keyframes pulse-shield-dmg-orange {
+  from { opacity: 0.4; box-shadow: 0 0 3px #ff8c00; }
+  to   { opacity: 1;   box-shadow: 0 0 10px #ff8c00; }
+}
+ 
+.shield-dmg-label.damaged-engines { color: #ff8c00; }

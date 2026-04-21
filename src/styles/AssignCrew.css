@@ -435,3 +435,46 @@
   background: rgba(255, 60, 30, 0.05) !important;
   opacity: 0.9;
 }
+
+.status-dot.orange {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ff8c00;
+  box-shadow: 0 0 5px #ff8c00;
+  animation: pulse-orange 1.5s infinite alternate;
+}
+ 
+@keyframes pulse-orange {
+  from { opacity: 0.5; box-shadow: 0 0 4px #ff8c00; }
+  to   { opacity: 1;   box-shadow: 0 0 12px #ff8c00; }
+}
+ 
+/* Card de motores espelhando o card de escudos */
+.assign-engines-card {
+  grid-column: 1 / -1;
+  border-left-color: rgba(255, 140, 0, 0.5) !important;
+}
+ 
+.assign-engines-card.status-avariada {
+  border-left-color: #ff8c00 !important;
+  background: rgba(255, 140, 0, 0.05) !important;
+}
+ 
+.assign-engines-card.status-destruida {
+  border-left-color: #ff3c1e !important;
+  background: rgba(255, 60, 30, 0.05) !important;
+  opacity: 0.9;
+}
+ 
+/* Botão de reparo variante motores (laranja) */
+.assign-repair-btn--engines {
+  background: rgba(255, 140, 0, 0.15) !important;
+  border-color: rgba(255, 140, 0, 0.5) !important;
+  color: #ff8c00 !important;
+}
+ 
+.assign-repair-btn--engines:hover {
+  background: #ff8c00 !important;
+  color: #000 !important;
+}

@@ -129,6 +129,10 @@ const AssignCrew = ({ currentPlayer, currentRole, onClose }) => {
   const shieldStatus = shipData?.shieldStatus || 'operacional';
   const shieldTurnos = shipData?.shieldTurnosParaReparo || 0;
 
+  // ─── Dados dos motores da nave ────────────────────────────────────────────
+  const enginesStatus = shipData?.enginesStatus || 'operacional';
+  const enginesTurnos = shipData?.enginesTurnosParaReparo || 0;
+
   const handleShieldRepairRequest = () => {
     const requests = JSON.parse(localStorage.getItem("repair_requests") || "[]");
     const alreadyRequested = requests.some(r => r.moduleId === "__shield__" && r.shipId === shipId);
@@ -147,6 +151,26 @@ const AssignCrew = ({ currentPlayer, currentRole, onClose }) => {
     };
     localStorage.setItem("repair_requests", JSON.stringify([...requests, newRequest]));
     alert("Solicitação de reparo dos escudos enviada ao comando.");
+  };
+
+  const handleEnginesRepairRequest = () => {
+    const requests = JSON.parse(localStorage.getItem("repair_requests") || "[]");
+    const alreadyRequested = requests.some(r => r.moduleId === "__engines__" && r.shipId === shipId);
+    if (alreadyRequested) {
+      alert("Já existe uma solicitação de reparo dos motores em andamento.");
+      return;
+    }
+    const newRequest = {
+      id: Date.now(),
+      shipName: shipData.name,
+      shipId: shipId,
+      module: "Motores",
+      moduleId: "__engines__",
+      pilot: currentPlayer.nickname,
+      isEngines: true,
+    };
+    localStorage.setItem("repair_requests", JSON.stringify([...requests, newRequest]));
+    alert("Solicitação de reparo dos motores enviada ao comando.");
   };
 
   return (
@@ -313,7 +337,8 @@ const AssignCrew = ({ currentPlayer, currentRole, onClose }) => {
                 {shieldStatus === 'avariada'     && `AVARIADO · MÁX. NÍV. 2 · ${shieldTurnos}T`}
                 {shieldStatus === 'destruida'    && `OFFLINE · BLOQUEADO · ${shieldTurnos}T`}
               </div>
-              <div className={`assign-torreta-ocupante ${shieldStatus === 'operacional' ? 'filled' : 'empty'}`}
+              <div
+                className={`assign-torreta-ocupante ${shieldStatus === 'operacional' ? 'filled' : 'empty'}`}
                 style={{
                   color: shieldStatus === 'destruida' ? '#ff3c1e'
                         : shieldStatus === 'avariada' ? '#ffae00'
@@ -324,6 +349,45 @@ const AssignCrew = ({ currentPlayer, currentRole, onClose }) => {
                 {shieldStatus === 'operacional' && '— NORMAL —'}
                 {shieldStatus === 'avariada'    && '— AVARIADO —'}
                 {shieldStatus === 'destruida'   && '— DESTRUÍDO —'}
+              </div>
+            </div>
+
+            {/* ─── CARD DE MOTORES ──────────────────────────────────── */}
+            <div className={`assign-torreta-card assign-engines-card status-${enginesStatus}`}>
+              <div className="assign-torreta-header">
+                <span className="assign-torreta-name">⚙ MOTORES</span>
+                <div className="assign-status-dots">
+                  {enginesStatus !== 'operacional' && Array.from({ length: enginesTurnos }).map((_, i) => (
+                    <span
+                      key={i}
+                      className={`status-dot ${enginesStatus === 'destruida' ? 'black' : 'orange'}`}
+                      title={`${enginesTurnos} turno(s) restante(s)`}
+                    />
+                  ))}
+                </div>
+                {isPilot && enginesStatus !== 'operacional' && (
+                  <button className="assign-repair-btn assign-repair-btn--engines" onClick={handleEnginesRepairRequest}>
+                    REPARO
+                  </button>
+                )}
+              </div>
+              <div className="assign-torreta-caps">
+                {enginesStatus === 'operacional'  && 'OPERACIONAL · NÍVEL LIVRE'}
+                {enginesStatus === 'avariada'     && `AVARIADO · MÁX. NÍV. 3 · ${enginesTurnos}T`}
+                {enginesStatus === 'destruida'    && `OFFLINE · BLOQUEADO · ${enginesTurnos}T`}
+              </div>
+              <div
+                className={`assign-torreta-ocupante ${enginesStatus === 'operacional' ? 'filled' : 'empty'}`}
+                style={{
+                  color: enginesStatus === 'destruida' ? '#ff3c1e'
+                        : enginesStatus === 'avariada' ? '#ff8c00'
+                        : '#4a9eff',
+                  fontSize: '0.7rem'
+                }}
+              >
+                {enginesStatus === 'operacional' && '— NORMAL —'}
+                {enginesStatus === 'avariada'    && '— AVARIADO —'}
+                {enginesStatus === 'destruida'   && '— DESTRUÍDO —'}
               </div>
             </div>
           </div>

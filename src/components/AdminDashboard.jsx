@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { playersList } from "../utils/players";
 import { shipsList } from "../data/ships";
 import "../styles/AdminDashboard.css";
-import { getAllShips, updateShipConfig, setEnemyShipStatus, clearDestroyedEnemies, deactivateAllEnemies, repairAllShipsGlobal, enforceAttributeLimits, repairShieldByAdmin } from "../utils/mockApi";
+import { getAllShips, updateShipConfig, setEnemyShipStatus, clearDestroyedEnemies, deactivateAllEnemies, repairAllShipsGlobal, enforceAttributeLimits, repairShieldByAdmin, repairEnginesByAdmin } from "../utils/mockApi";
 import TerminalCombate from "./TerminalCombate";
 import ConfirmModal from "./ConfirmModal";
 
@@ -45,11 +45,20 @@ const AdminDashboard = ({ onLogout }) => {
     return () => clearInterval(interval);
   }, []);
 
-  // ─── Aceitar reparo de TORRETA ────────────────────────────────────────────
+  // ─── Aceitar reparo ──────────────────────────────────────────────────────
   const handleAcceptRepair = (req) => {
     // Reparo de ESCUDO
     if (req.isShield) {
       repairShieldByAdmin(req.shipId);
+      const filtered = repairRequests.filter(r => r.id !== req.id);
+      localStorage.setItem("repair_requests", JSON.stringify(filtered));
+      refreshData();
+      return;
+    }
+
+    // Reparo de MOTORES
+    if (req.isEngines) {
+      repairEnginesByAdmin(req.shipId);
       const filtered = repairRequests.filter(r => r.id !== req.id);
       localStorage.setItem("repair_requests", JSON.stringify(filtered));
       refreshData();
@@ -337,10 +346,16 @@ const AdminDashboard = ({ onLogout }) => {
                     >
                       {ship.isEnemy ? `[HOSTIL] ` : `[ALIADA] `}
                       {ship.name.toUpperCase()}
-                      {/* Indicador de escudo avariado na lista */}
+                      {/* Indicador de escudo avariado */}
                       {ship.shieldStatus && ship.shieldStatus !== 'operacional' && (
                         <span style={{ marginLeft: '6px', color: ship.shieldStatus === 'destruida' ? '#ff3c1e' : '#ffae00', fontSize: '0.7rem' }}>
                           🛡{ship.shieldStatus === 'destruida' ? '✗' : '⚡'}
+                        </span>
+                      )}
+                      {/* Indicador de motores avariados */}
+                      {ship.enginesStatus && ship.enginesStatus !== 'operacional' && (
+                        <span style={{ marginLeft: '4px', color: ship.enginesStatus === 'destruida' ? '#ff3c1e' : '#ff8c00', fontSize: '0.7rem' }}>
+                          ⚙{ship.enginesStatus === 'destruida' ? '✗' : '⚡'}
                         </span>
                       )}
                     </div>
@@ -374,7 +389,7 @@ const AdminDashboard = ({ onLogout }) => {
                       </div>
                     )}
 
-                    {/* PAINEL DE ESCUDOS DA NAVE SELECIONADA */}
+                    {/* PAINEL DE ESCUDOS */}
                     {(() => {
                       const sel = fleetData[selectedShipId];
                       const ss  = sel?.shieldStatus || 'operacional';
@@ -394,18 +409,7 @@ const AdminDashboard = ({ onLogout }) => {
                                 variant: "success",
                                 confirmLabel: "REPARAR",
                                 onConfirm: () => {
-                                  const { repairShieldByAdmin } = require('../utils/mockApi') || {};
-                                  // Inline repair (import already at top)
-                                  const ships = getAllShips();
-                                  const ship  = ships[selectedShipId];
-                                  if (ship) {
-                                    ship.shieldStatus           = 'operacional';
-                                    ship.shieldTurnosParaReparo = 0;
-                                    if (ship.attributes && ship.attributes.shields !== undefined) {
-                                      // Deixa os pontos como estão (enforceAttributeLimits já vai corrigir se precisar)
-                                    }
-                                    localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
-                                  }
+                                  repairShieldByAdmin(selectedShipId);
                                   setFleetData(getAllShips());
                                   refreshData();
                                 }
@@ -413,6 +417,39 @@ const AdminDashboard = ({ onLogout }) => {
                             }}
                           >
                             REPARAR ESCUDOS AGORA
+                          </button>
+                        </div>
+                      ) : null;
+                    })()}
+
+                    {/* PAINEL DE MOTORES */}
+                    {(() => {
+                      const sel = fleetData[selectedShipId];
+                      const es  = sel?.enginesStatus || 'operacional';
+                      const et  = sel?.enginesTurnosParaReparo || 0;
+                      return es !== 'operacional' ? (
+                        <div className="fleet-form-group" style={{ padding: '1rem', background: es === 'destruida' ? 'rgba(255,60,30,0.07)' : 'rgba(255,140,0,0.07)', border: `1px solid ${es === 'destruida' ? '#ff3c1e' : '#ff8c00'}` }}>
+                          <label style={{ color: es === 'destruida' ? '#ff3c1e' : '#ff8c00' }}>
+                            ⚙ MOTORES — {es === 'destruida' ? 'DESTRUÍDOS' : 'AVARIADOS'} ({et} TURNO{et !== 1 ? 'S' : ''})
+                          </label>
+                          <button
+                            className="fleet-save-btn"
+                            style={{ marginTop: '0.5rem', background: 'rgba(42,255,140,0.1)', color: '#2aff8c', border: '1px solid #2aff8c' }}
+                            onClick={() => {
+                              showConfirm({
+                                title: "REPARO DE MOTORES",
+                                message: `Restaurar os motores de ${sel.name} imediatamente?`,
+                                variant: "success",
+                                confirmLabel: "REPARAR",
+                                onConfirm: () => {
+                                  repairEnginesByAdmin(selectedShipId);
+                                  setFleetData(getAllShips());
+                                  refreshData();
+                                }
+                              });
+                            }}
+                          >
+                            REPARAR MOTORES AGORA
                           </button>
                         </div>
                       ) : null;
@@ -475,17 +512,17 @@ const AdminDashboard = ({ onLogout }) => {
               key={req.id}
               style={{
                 background: '#1a1a1a',
-                border: `1px solid ${req.isShield ? '#ffae00' : '#b026ff'}`,
+                border: `1px solid ${req.isShield ? '#ffae00' : req.isEngines ? '#ff8c00' : '#b026ff'}`,
                 padding: '15px',
                 marginBottom: '10px',
-                boxShadow: `0 0 15px ${req.isShield ? 'rgba(255,174,0,0.4)' : 'rgba(176, 38, 255, 0.4)'}`,
+                boxShadow: `0 0 15px ${req.isShield ? 'rgba(255,174,0,0.4)' : req.isEngines ? 'rgba(255,140,0,0.4)' : 'rgba(176, 38, 255, 0.4)'}`,
               }}
             >
-              <h4 style={{ color: req.isShield ? '#ffae00' : '#b026ff', margin: '0 0 5px 0', fontSize: '0.8rem' }}>
-                {req.isShield ? '🛡 SOLICITAÇÃO DE REPARO DE ESCUDOS' : 'SOLICITAÇÃO DE REPARO'}
+              <h4 style={{ color: req.isShield ? '#ffae00' : req.isEngines ? '#ff8c00' : '#b026ff', margin: '0 0 5px 0', fontSize: '0.8rem' }}>
+                {req.isShield ? '🛡 SOLICITAÇÃO DE REPARO DE ESCUDOS' : req.isEngines ? '⚙ SOLICITAÇÃO DE REPARO DE MOTORES' : 'SOLICITAÇÃO DE REPARO'}
               </h4>
               <p style={{ fontSize: '0.7rem', color: '#ccc' }}>
-                A nave <b>{req.shipName}</b> solicita reparo imediato {req.isShield ? 'dos' : 'no módulo'} <b>{req.module}</b>.
+                A nave <b>{req.shipName}</b> solicita reparo imediato {req.isShield ? 'dos' : req.isEngines ? 'dos' : 'no módulo'} <b>{req.module}</b>.
               </p>
               <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
                 <button

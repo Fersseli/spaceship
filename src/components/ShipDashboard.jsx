@@ -149,6 +149,12 @@ const ShipDashboard = ({ playerData, onLogout }) => {
         } else if (data.logText.includes("[ESCUDO: DESTRUÍDOS]")) {
           moduleMsg = "💀 ESCUDOS DESTRUÍDOS";
         }
+        // Motores
+        else if (data.logText.includes("[MOTORES: AVARIADOS]")) {
+          moduleMsg = "⚙ MOTORES AVARIADOS";
+        } else if (data.logText.includes("[MOTORES: DESTRUÍDOS]")) {
+          moduleMsg = "💀 MOTORES DESTRUÍDOS";
+        }
 
         if (data.logText.includes("EXTREMO"))  extraTag = "extremo.";
         else if (data.logText.includes("CRÍTICO")) extraTag = "crítico.";
@@ -231,7 +237,8 @@ const ShipDashboard = ({ playerData, onLogout }) => {
             else if (data.logText.includes("[MÓDULO DESTRUÍDO:")) { const m = data.logText.match(/\[MÓDULO DESTRUÍDO: (.*?)\]/); if (m) moduleMsg = `${m[1]} DESTRUÍDA`; }
             else if (data.logText.includes("[ESCUDO: AVARIADOS]")) { moduleMsg = "⚡ ESCUDOS AVARIADOS"; }
             else if (data.logText.includes("[ESCUDO: DESTRUÍDOS]")) { moduleMsg = "💀 ESCUDOS DESTRUÍDOS"; }
-            if (data.logText.includes("EXTREMO")) extraTag = "EXTREMO.";
+            else if (data.logText.includes("[MOTORES: AVARIADOS]")) { moduleMsg = "⚙ MOTORES AVARIADOS"; }
+            else if (data.logText.includes("[MOTORES: DESTRUÍDOS]")) { moduleMsg = "💀 MOTORES DESTRUÍDOS"; }if (data.logText.includes("EXTREMO")) extraTag = "EXTREMO.";
             else if (data.logText.includes("CRÍTICO")) extraTag = "CRÍTICO.";
           }
         } else {
@@ -390,7 +397,10 @@ const ShipDashboard = ({ playerData, onLogout }) => {
   // ─── Estado de escudos da nave do jogador ─────────────────────────────────
   const shieldStatus = shipDataState?.shieldStatus || 'operacional';
   const shieldTurnos = shipDataState?.shieldTurnosParaReparo || 0;
-
+    // ─── Estado de motores da nave do jogador ─────────────────────────────────
+  const enginesStatus = shipDataState?.enginesStatus || 'operacional';
+  const enginesTurnos = shipDataState?.enginesTurnosParaReparo || 0;
+ 
   const renderBars = (attributeName, currentLevel) => {
     const maxAllowed = maxAttrs[attributeName];
 
@@ -519,6 +529,22 @@ const ShipDashboard = ({ playerData, onLogout }) => {
                       ))}
                       <span className={`shield-dmg-label ${shieldStatus === 'destruida' ? 'destroyed' : 'damaged'}`}>
                         {shieldStatus === 'destruida' ? 'OFFLINE' : 'AVARIADO'}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* ─── BOLINHAS DE AVARIA DOS MOTORES ──────────────────── */}
+                  {name === "engines" && enginesStatus !== 'operacional' && (
+                    <div className="shield-damage-indicator">
+                      {Array.from({ length: enginesTurnos }).map((_, i) => (
+                        <span
+                          key={i}
+                          className={`shield-dmg-dot ${enginesStatus === 'destruida' ? 'destroyed' : 'damaged-engines'}`}
+                          title={`Motores ${enginesStatus} — ${enginesTurnos} turno(s)`}
+                        />
+                      ))}
+                      <span className={`shield-dmg-label ${enginesStatus === 'destruida' ? 'destroyed' : 'damaged-engines'}`}>
+                        {enginesStatus === 'destruida' ? 'OFFLINE' : 'AVARIADO'}
                       </span>
                     </div>
                   )}

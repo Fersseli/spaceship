@@ -750,3 +750,105 @@
   cursor: not-allowed;
   pointer-events: none;
 }
+
+.tc-engines-status-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  background: rgba(255, 140, 0, 0.1);
+  border: 1px solid rgba(255, 140, 0, 0.4);
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+ 
+.tc-engines-icon {
+  font-size: 0.75rem;
+}
+ 
+/* Entrada de log com motores */
+.tc-log-entry.engines-hit {
+  border-left-color: #ff8c00;
+  background: rgba(255, 140, 0, 0.04);
+}
+ 
+/* Mini controle de motores bloqueado */
+.tc-mini-ctrl--blocked .tc-mini-btns button:first-child {
+  background: rgba(255, 60, 30, 0.1);
+  border-color: rgba(255, 60, 30, 0.3);
+  color: rgba(255, 255, 255, 0.2);
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ================================================================
+   Adicionar ao FINAL de src/styles/TerminalCombate.css
+   Sistema de Lock Balístico
+   ================================================================ */
+
+/* ── Indicador de lock balístico (verde-lima, diferente do vermelho do míssil) ── */
+.tc-ballistic-lock-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.55rem;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.tc-lock-label--ballistic {
+  color: rgba(180, 255, 80, 0.7) !important;
+}
+
+/* Caixa de lock balística — cor verde-lima */
+.tc-lock-box--ballistic {
+  width: 10px;
+  height: 10px;
+  border: 1px solid rgba(180, 255, 80, 0.4);
+  background: transparent;
+  display: inline-block;
+}
+
+.tc-lock-box--ballistic.filled {
+  background: #b4ff50;
+  box-shadow: 0 0 5px #b4ff50;
+}
+
+.tc-lock-box--ballistic.blink-green {
+  animation: pulse-green-lock 0.5s infinite alternate;
+}
+
+@keyframes pulse-green-lock {
+  from { background: #b4ff50; box-shadow: 0 0 4px #b4ff50; }
+  to   { background: #d4ff90; box-shadow: 0 0 12px #b4ff50; }
+}
+
+/* ── Botão de disparo balístico com lock ativo (verde) ── */
+.tc-fire-btn--ballistic-lock {
+  background: rgba(180, 255, 80, 0.12) !important;
+  border-color: rgba(180, 255, 80, 0.5) !important;
+  color: #b4ff50 !important;
+}
+
+.tc-fire-btn--ballistic-lock:hover:not(:disabled) {
+  background: rgba(180, 255, 80, 0.3) !important;
+  border-color: #b4ff50 !important;
+  box-shadow: 0 0 12px rgba(180, 255, 80, 0.4) !important;
+}
+
+/* ── Alerta de vantagem balística (verde, abaixo dos botões) ── */
+.tc-ballistic-advantage-alert {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.58rem;
+  font-weight: bold;
+  color: #b4ff50;
+  background: rgba(180, 255, 80, 0.08);
+  border: 1px solid rgba(180, 255, 80, 0.35);
+  padding: 0.4rem 0.6rem;
+  text-align: center;
+  margin-top: 0.3rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+ 
