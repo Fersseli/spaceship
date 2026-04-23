@@ -852,3 +852,116 @@
   text-transform: uppercase;
 }
  
+
+/* ================================================================
+   ADICIONAR AO FINAL DE src/styles/TerminalCombate.css
+   Sistema de Dogfight — novos elementos visuais
+   ================================================================ */
+
+/* ── Layout: 3 colunas (cards / radar / log) ── */
+.tc-layout {
+  /* Substituir a linha existente: grid-template-columns: 1fr 360px; */
+  grid-template-columns: 1fr 230px 340px;
+}
+
+/* Painel do Radar no Terminal */
+.tc-radar-panel {
+  border-left:  1px solid rgba(255, 60, 30, 0.2);
+  border-right: 1px solid rgba(255, 60, 30, 0.2);
+  overflow-y: auto;
+  background: rgba(8, 3, 2, 0.97);
+}
+
+/* Badge de Proximidade no cabeçalho do card */
+.tc-card-prox-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.55rem;
+  font-weight: 700;
+  border: 1px solid;
+  padding: 1px 5px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* Badge de Derrapagem */
+.tc-card-derrap-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.5rem;
+  font-weight: 700;
+  color: #ffae00;
+  background: rgba(255, 174, 0, 0.1);
+  border: 1px solid rgba(255, 174, 0, 0.5);
+  padding: 1px 5px;
+  letter-spacing: 1px;
+  animation: derrap-blink 0.6s step-end infinite;
+}
+
+@keyframes derrap-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+/* Badge de proximidade dentro do CrewSlot */
+.tc-prox-slot-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.5rem;
+  font-weight: 700;
+  padding: 2px 5px;
+  margin-top: 3px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  border: 1px solid;
+  width: fit-content;
+}
+
+.tc-prox-slot-badge.advantage {
+  color: #2aff8c;
+  border-color: rgba(42, 255, 140, 0.4);
+  background: rgba(42, 255, 140, 0.06);
+}
+
+.tc-prox-slot-badge.penalty {
+  color: #ffae00;
+  border-color: rgba(255, 174, 0, 0.4);
+  background: rgba(255, 174, 0, 0.06);
+}
+
+.tc-prox-slot-badge.blocked {
+  color: #ff3c1e;
+  border-color: rgba(255, 60, 30, 0.5);
+  background: rgba(255, 60, 30, 0.08);
+  animation: derrap-blink 0.5s step-end infinite;
+}
+
+/* Botão de disparo bloqueado por proximidade */
+.tc-fire-btn--blocked {
+  background: rgba(100, 100, 100, 0.1) !important;
+  border-color: rgba(150, 150, 150, 0.3) !important;
+  color: rgba(150, 150, 150, 0.5) !important;
+  cursor: not-allowed !important;
+}
+
+/* Responsivo: esconde radar em tela pequena */
+@media (max-width: 1100px) {
+  .tc-layout {
+    grid-template-columns: 1fr 340px;
+  }
+  .tc-radar-panel {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .tc-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 280px;
+  }
+  .tc-radar-panel {
+    display: none;
+  }
+  .tc-log {
+    border-left: none;
+    border-top: 1px solid rgba(255, 60, 30, 0.2);
+  }
+}

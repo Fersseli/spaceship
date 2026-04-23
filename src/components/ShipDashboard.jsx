@@ -5,10 +5,11 @@ import { calculateRemainingPoints, getEffect } from "../utils/effectHelpers";
 import { shipsDatabase } from "../data/ships";
 import ShipRadarChart from "./ShipRadarChart";
 import AssignCrew from "./AssignCrew";
-import { removePlayerFromAllCrews } from "../utils/mockApi";
+import { removePlayerFromAllCrews, getProximityModifiers } from "../utils/mockApi";
 import DexterityRanking from "./Destreza";
 import { getShipData, updateShipAttributes, getAllShips, processPlayerAttack, updateShipConfig, getShipMaxAttributes } from "../utils/mockApi";
 import ConfirmModal from "./ConfirmModal";
+import RadarTatico from "./RadarTatico";
 
 const ShipDashboard = ({ playerData, onLogout }) => {
 
@@ -34,6 +35,7 @@ const ShipDashboard = ({ playerData, onLogout }) => {
   const closeConfirm = () => setConfirmState(prev => ({ ...prev, isOpen: false }));
 
   // --- Áudio ---
+  const repairSound = useRef(new Audio('/repair.mp3'));
   const rechargeSound    = useRef(new Audio('/recharge.mp3'));
   const powerDownGeneric = useRef(new Audio('/outage1.mp3'));
   const powerDownOutage  = useRef(new Audio('/outage.mp3'));
@@ -44,6 +46,34 @@ const ShipDashboard = ({ playerData, onLogout }) => {
   const soundTimeout     = useRef(null);
   const targetSound      = useRef(new Audio('/mira.wav'));
   const confirmSound     = useRef(new Audio('/confirm.wav'));
+  const selectSound      = useRef(new Audio('/selecta.mp3'));
+  const backSound        = useRef(new Audio('/backb.mp3'));
+  const failSound        = useRef(new Audio('/failship.wav'));
+  const sonarSound       = useRef(new Audio('/sonar.mp3')); // <--- ADICIONE ESTA LINHA
+
+  const playFailSound = () => {
+    if (failSound.current) {
+      failSound.current.currentTime = 0;
+      failSound.current.volume = 1.0;
+      failSound.current.play().catch(() => {});
+    }
+  };
+
+  const playSelectSound = () => {
+    if (selectSound.current) {
+      selectSound.current.currentTime = 0;
+      selectSound.current.volume = 1.0;
+      selectSound.current.play().catch(() => {});
+    }
+  };
+
+  const playBackSound = () => {
+    if (backSound.current) {
+      backSound.current.currentTime = 0;
+      backSound.current.volume = 1.0;
+      backSound.current.play().catch(() => {});
+    }
+  };
 
   const currentlyTargeted = allShipsList.some(s =>
     s.activeCrew && s.activeCrew.some(m => m.missileTarget === playerData.ship)
@@ -64,6 +94,22 @@ const ShipDashboard = ({ playerData, onLogout }) => {
       }
     }
   }, [currentlyTargeted]);
+
+  useEffect(() => {
+    const handleSonarEvent = (e) => {
+      // Se a chave "enemy_activated_event" foi alterada no localStorage, toca o som
+      if (e.key === "enemy_activated_event" && e.newValue) {
+        if (sonarSound.current) {
+          sonarSound.current.currentTime = 0;
+          sonarSound.current.volume = 1.0;
+          sonarSound.current.play().catch(err => console.warn("Áudio sonar bloqueado pelo navegador:", err));
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleSonarEvent);
+    return () => window.removeEventListener('storage', handleSonarEvent);
+  }, []);
 
   const playPowerUpSound = (startLevel, endLevel) => {
     if (!rechargeSound.current) return;
@@ -185,7 +231,16 @@ const ShipDashboard = ({ playerData, onLogout }) => {
 
   useEffect(() => {
     if (hitEvent) {
-      if (hitEvent.type === "hit" || hitEvent.type === "damage-dealt") {
+    const eventText = hitEvent.text?.toLowerCase();
+
+      if (eventText === "reparo") {
+    if (repairSound.current) {
+      repairSound.current.currentTime = 0;
+      repairSound.current.volume = 1.0;
+      // Adicionado log para debug no console
+      repairSound.current.play().catch(e => console.error("Erro ao tocar repair.mp3:", e));
+    }
+    } else if (hitEvent.type === "hit" || hitEvent.type === "damage-dealt") {
         if (hitEvent.extraTag) {
           if (critSound.current) { critSound.current.currentTime = 0; critSound.current.volume = 1.0; critSound.current.play().catch(() => {}); }
         } else {
@@ -226,7 +281,7 @@ const ShipDashboard = ({ playerData, onLogout }) => {
         let extraTag = "", moduleMsg = "";
 
         if (data.isRepair) {
-          overlayText = "REPARO"; overlayType = "miss";
+          overlayText = "reparo!"; overlayType = "miss";
         } else if (data.isAbsorbed) {
           overlayText = "absorvido!"; overlayType = "miss";
         } else if (data.damage > 0) {
@@ -466,8 +521,7 @@ const ShipDashboard = ({ playerData, onLogout }) => {
               <>
                 <span className="logout-text">ATACAR</span>
                 <button
-                  onClick={() => setShowAttackModal(true)}
-                  className="logout-button"
+                  onClick={() => { playSelectSound(); setShowAttackModal(true); }}                  className="logout-button"
                   title="Sistemas de Armas"
                   style={{ fontSize: "0.6rem", letterSpacing: "1px", width: "auto", padding: "0 0.75rem", borderColor: '#ff4a4a', color: '#ff4a4a' }}
                 >
@@ -476,11 +530,11 @@ const ShipDashboard = ({ playerData, onLogout }) => {
               </>
             )}
             <span className="logout-text">TRIPULACAO</span>
-            <button onClick={() => setShowAssignCrew(true)} className="logout-button" title="Assign Crew" style={{ fontSize: "0.6rem", letterSpacing: "1px", width: "auto", padding: "0 0.75rem" }}>
+            <button onClick={() => { playSelectSound(); setShowAssignCrew(true); }} className="logout-button" title="Assign Crew" style={{ fontSize: "0.6rem", letterSpacing: "1px", width: "auto", padding: "0 0.75rem" }}>
               X
             </button>
             <span className="logout-text">DESTREZA</span>
-            <button onClick={() => setShowDexterityModal(true)} className="logout-button" title="Ranking Geral" style={{ fontSize: "0.6rem", letterSpacing: "1px", width: "auto", padding: "0 0.75rem" }}>
+            <button onClick={() => { playSelectSound(); setShowDexterityModal(true); }} className="logout-button" title="Ranking Geral" style={{ fontSize: "0.6rem", letterSpacing: "1px", width: "auto", padding: "0 0.75rem" }}>
               Y
             </button>
             <span className="logout-text">deslogar</span>
@@ -614,15 +668,26 @@ const ShipDashboard = ({ playerData, onLogout }) => {
               <div className="remaining-label">Pontos Restantes</div>
               <div className="remaining-value">{remainingPoints}</div>
             </div>
+            
           </section>
+          <section className="radar2" style={{ gridColumn: "1 / -1", marginTop: "20px", width: "100%" }}>
+          <div style={{ marginTop: '20px' }}>
+                <RadarTatico
+                  playerShipId={playerData.ship}
+                  playerRole={currentRole}
+                  theme="starfield" 
+                  onFail={playFailSound} /* <--- Adicione esta linha */
+                />
+              </div>
+              </section>
         </main>
       </div>
 
       {showAssignCrew && (
-        <AssignCrew currentPlayer={playerData} currentRole={currentRole} onClose={() => setShowAssignCrew(false)} />
+        <AssignCrew currentPlayer={playerData} currentRole={currentRole} onClose={() => { playBackSound(); setShowAssignCrew(false); }} />
       )}
       {showDexterityModal && (
-        <DexterityRanking onClose={() => setShowDexterityModal(false)} />
+        <DexterityRanking onClose={() => { playBackSound(); setShowDexterityModal(false); }} />
       )}
 
       {hitEvent && (
@@ -641,7 +706,7 @@ const ShipDashboard = ({ playerData, onLogout }) => {
 
       {/* MODAL DE ATAQUE */}
       {showAttackModal && (
-        <div className="assign-overlay" onClick={() => setShowAttackModal(false)}>
+        <div className="assign-overlay" onClick={() => { playBackSound(); setShowAttackModal(false); }}>
           <div className="attack-modal" onClick={e => e.stopPropagation()}>
             <div className="attack-modal__scanline" />
             <div className="attack-modal__header">
@@ -652,7 +717,7 @@ const ShipDashboard = ({ playerData, onLogout }) => {
                   <h2 className="attack-modal__title">Sistema de Armas</h2>
                 </div>
               </div>
-              <button className="attack-modal__close" onClick={() => setShowAttackModal(false)}>×</button>
+              <button className="attack-modal__close" onClick={() => { playBackSound(); setShowAttackModal(false); }}>×</button>
             </div>
 
             <div className="attack-modal__weapon-row">
@@ -741,6 +806,30 @@ const ShipDashboard = ({ playerData, onLogout }) => {
                 )}
               </div>
 
+              {(() => {
+  if (!attackTarget) return null;
+  const tShip = allShipsList.find(s => s.id === attackTarget);
+  const prox  = tShip?.proximity;
+  if (prox === undefined || prox === null || !tShip?.isEnemy) return null;
+  const { advantageBonus, precisionMultiplier, blocked } = getProximityModifiers(prox);
+  if (blocked) return (
+    <div className="attack-modal__prox-alert blocked">
+      🚫 PROX {prox} — FORA DE ALCANCE. Ataque impossível.
+    </div>
+  );
+  if (advantageBonus > 0) return (
+    <div className="attack-modal__prox-alert advantage">
+      📡 VANTAGEM P{prox}: Role com {advantageBonus} vantagem{advantageBonus > 1 ? "ns" : ""} na mesa!
+    </div>
+  );
+  if (precisionMultiplier < 1) return (
+    <div className="attack-modal__prox-alert penalty">
+      ⚠ ALVO DISTANTE P{prox}: CORTE sua precisão pela metade antes de rolar!
+    </div>
+  );
+  return null;
+})()}
+
               {showDamageFields && (
                 <div className="attack-modal__field">
                   <label className="attack-modal__field-label">
@@ -786,19 +875,26 @@ const ShipDashboard = ({ playerData, onLogout }) => {
 
             <div className="attack-modal__footer" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <button
-                className="attack-modal__fire-btn"
-                onClick={handleConfirmAttack}
-                disabled={(!isCurrentlyAiming && !attackTarget) || (showDamageFields && !isExtremo && !attackDamage) || isAimingWait}
-              >
-                <span>
-                  {attackWeaponType === "missiles"
-                    ? (!isCurrentlyAiming ? "INICIAR MIRA" : (isMissileReady ? "DISPARAR MÍSSIL" : "MIRANDO... (AGUARDE)"))
-                    : "CONFIRMAR DISPARO"}
-                </span>
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                  <path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
+  className="attack-modal__fire-btn"
+  onClick={handleConfirmAttack}
+  disabled={
+    (!isCurrentlyAiming && !attackTarget) || 
+    (showDamageFields && !isExtremo && !attackDamage) || 
+    isAimingWait || 
+    // Lógica de Proximidade:
+    (allShipsList.find(s => s.id === attackTarget)?.isEnemy && 
+     (allShipsList.find(s => s.id === attackTarget)?.proximity ?? 3) >= 5)
+  }
+>
+  <span>
+    {attackWeaponType === "missiles"
+      ? (!isCurrentlyAiming ? "INICIAR MIRA" : (isMissileReady ? "DISPARAR MÍSSIL" : "MIRANDO... (AGUARDE)"))
+      : "CONFIRMAR DISPARO"}
+  </span>
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+    <path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+</button>
 
               {isCurrentlyAiming && (
                 <button

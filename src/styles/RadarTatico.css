@@ -1,0 +1,698 @@
+/* ═══════════════════════════════════════════════════════════
+   RadarTatico.css — Sistema de Dogfight 3D
+   ═══════════════════════════════════════════════════════════ */
+
+.rt-root {
+  background: rgba(5, 8, 10, 0.97);
+  border: 1px solid rgba(255, 60, 30, 0.3);
+  border-left: 3px solid #ff3c1e;
+  font-family: 'Orbitron', sans-serif;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.rt-root::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 3px,
+    rgba(255, 60, 30, 0.012) 3px,
+    rgba(255, 60, 30, 0.012) 4px
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── Header ── */
+.rt-header {
+  padding: 0.75rem 1rem 0.5rem;
+  border-bottom: 1px solid rgba(255, 60, 30, 0.15);
+  background: rgba(255, 30, 10, 0.04);
+  position: relative;
+  z-index: 1;
+}
+
+.rt-eyebrow {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.5rem;
+  color: rgba(255, 80, 40, 0.55);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+.rt-subtitle {
+  font-size: 0.65rem;
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+/* ── Radar SVG Wrapper ── */
+.rt-radar-wrap {
+  position: relative;
+  padding: 0.75rem;
+  display: flex;
+  justify-content: center;
+  z-index: 1;
+}
+
+.rt-svg {
+  width: 100%;
+  max-width: 350px;
+  aspect-ratio: 1;
+  filter: drop-shadow(0 0 12px rgba(255, 60, 30, 0.2));
+}
+
+/* Varredura animada */
+.rt-sweep {
+  transform-origin: 50px 50px;
+  animation: rt-rotate 4s linear infinite;
+}
+
+@keyframes rt-rotate {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* Pulso da nave do jogador */
+.rt-player-pulse {
+  animation: rt-player-blink 2s ease-in-out infinite alternate;
+}
+
+@keyframes rt-player-blink {
+  from { opacity: 0.7; r: 2.2px; }
+  to   { opacity: 1;   r: 2.5px; box-shadow: 0 0 6px #4a9eff; }
+}
+
+/* Blip inimigo */
+.rt-blip {
+  animation: rt-blip-pulse 1.8s ease-in-out infinite alternate;
+  transition: r 0.3s ease, opacity 0.3s ease;
+}
+
+@keyframes rt-blip-pulse {
+  from { opacity: 0.7; }
+  to   { opacity: 1; }
+}
+
+/* Anel de derrapagem */
+.rt-derrap-ring {
+  animation: rt-derrap-spin 2s linear infinite;
+}
+
+@keyframes rt-derrap-spin {
+  from { transform-origin: 50px 50px; transform: rotate(0deg); }
+  to   { transform-origin: 50px 50px; transform: rotate(360deg); }
+}
+
+/* ── HUD de Velocidade ── */
+.rt-speed-hud {
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  min-width: 60px;
+}
+
+.rt-speed-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.45rem;
+  color: rgba(255, 255, 255, 0.3);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.rt-speed-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #4a9eff;
+  line-height: 1;
+}
+
+.rt-speed-val.is-derrap {
+  color: #ffae00;
+  animation: rt-derrap-blink 0.6s step-end infinite;
+}
+
+@keyframes rt-derrap-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+.rt-speed-max {
+  font-size: 0.6rem;
+  color: rgba(74, 158, 255, 0.4);
+}
+
+.rt-speed-bar-bg {
+  width: 50px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.rt-speed-bar-fill {
+  height: 100%;
+  transition: width 0.4s ease;
+}
+.rt-speed-bar-fill.high { background: #ff3c1e; box-shadow: 0 0 6px rgba(255,60,30,0.6); }
+.rt-speed-bar-fill.mid  { background: #ffae00; box-shadow: 0 0 6px rgba(255,174,0,0.4); }
+.rt-speed-bar-fill.low  { background: #2aff8c; box-shadow: 0 0 6px rgba(42,255,140,0.4); }
+
+.rt-derrap-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.42rem;
+  color: #ffae00;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  background: rgba(255, 174, 0, 0.1);
+  border: 1px solid rgba(255, 174, 0, 0.4);
+  padding: 1px 4px;
+  text-align: right;
+}
+
+/* ── Lista de Inimigos ── */
+.rt-enemy-list {
+  padding: 0.5rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  border-top: 1px solid rgba(255, 60, 30, 0.1);
+  z-index: 1;
+  position: relative;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.rt-no-enemies {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem;
+  color: rgba(255, 255, 255, 0.2);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 0.5rem 0;
+}
+
+.rt-enemy-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.35rem 0.5rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-left: 2px solid rgba(255, 60, 30, 0.3);
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.rt-enemy-left {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.rt-enemy-name {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.rt-enemy-speed {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.55rem;
+  color: rgba(255, 255, 255, 0.35);
+  letter-spacing: 1px;
+}
+
+.rt-skid-tag {
+  color: #ffae00;
+  font-weight: 700;
+}
+
+.rt-enemy-right {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.rt-prox-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.55rem;
+  font-weight: 700;
+  border: 1px solid;
+  padding: 1px 5px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.rt-mod-tag {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.48rem;
+  font-weight: 700;
+  padding: 1px 4px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  border: 1px solid;
+}
+.rt-mod-tag.green  { color: #2aff8c; border-color: rgba(42, 255, 140, 0.4); background: rgba(42,255,140,0.06); }
+.rt-mod-tag.yellow { color: #ffae00; border-color: rgba(255, 174, 0, 0.4);  background: rgba(255,174,0,0.06); }
+.rt-mod-tag.red    { color: #ff3c1e; border-color: rgba(255, 60, 30, 0.4);  background: rgba(255,60,30,0.06); }
+
+/* ── Status Message ── */
+.rt-status-msg {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.62rem;
+  color: #fff;
+  background: rgba(255, 60, 30, 0.08);
+  border-top: 1px solid rgba(255, 60, 30, 0.2);
+  padding: 0.5rem 0.75rem;
+  letter-spacing: 0.5px;
+  z-index: 1;
+  position: relative;
+  animation: rt-msg-in 0.2s ease-out;
+}
+
+@keyframes rt-msg-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Popup de Engajamento ── */
+.rt-engagement-popup {
+  position: relative;
+  z-index: 10;
+  margin: 0.5rem;
+  background: rgba(8, 12, 16, 0.98);
+  border: 1px solid #ffae00;
+  border-left: 3px solid #ffae00;
+  animation: rt-popup-in 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes rt-popup-in {
+  from { opacity: 0; transform: scale(0.95) translateY(-8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.rt-eng-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.5rem 0.75rem;
+  background: rgba(255, 174, 0, 0.06);
+  border-bottom: 1px solid rgba(255, 174, 0, 0.2);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.52rem;
+  color: rgba(255, 174, 0, 0.7);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.rt-eng-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #ffae00;
+  box-shadow: 0 0 6px rgba(255, 174, 0, 0.8);
+  animation: rt-blink-yellow 0.8s step-end infinite;
+  flex-shrink: 0;
+}
+
+@keyframes rt-blink-yellow {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.2; }
+}
+
+.rt-eng-body {
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.rt-eng-name {
+  font-size: 0.85rem;
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.rt-eng-speeds {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.rt-eng-spd.ally   { color: #4a9eff; }
+.rt-eng-spd.enemy  { color: #ff3c1e; }
+.rt-eng-vs { color: rgba(255,255,255,0.2); font-size: 0.55rem; }
+
+.rt-eng-winner {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 0.3rem 0.5rem;
+}
+.rt-eng-winner.ally  { color: #2aff8c; background: rgba(42,255,140,0.06); border: 1px solid rgba(42,255,140,0.2); }
+.rt-eng-winner.enemy { color: #ff3c1e; background: rgba(255,60,30,0.06); border: 1px solid rgba(255,60,30,0.2); }
+
+.rt-eng-question {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem;
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.5px;
+}
+
+.rt-eng-btns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+}
+
+.rt-eng-btn {
+  padding: 0.5rem;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: 1px solid;
+}
+
+.rt-eng-btn.closer {
+  background: rgba(255, 60, 30, 0.1);
+  border-color: rgba(255, 60, 30, 0.5);
+  color: #ff5028;
+}
+.rt-eng-btn.closer:hover {
+  background: #ff3c1e;
+  color: #000;
+  box-shadow: 0 0 12px rgba(255, 60, 30, 0.4);
+}
+
+.rt-eng-btn.further {
+  background: rgba(74, 158, 255, 0.1);
+  border-color: rgba(74, 158, 255, 0.5);
+  color: #4a9eff;
+}
+.rt-eng-btn.further:hover {
+  background: #4a9eff;
+  color: #000;
+  box-shadow: 0 0 12px rgba(74, 158, 255, 0.4);
+}
+
+.rt-eng-remaining {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.52rem;
+  color: rgba(255, 255, 255, 0.3);
+  letter-spacing: 1px;
+  text-align: center;
+}
+
+/* ── Botões de Controle do Mestre por Nave ── */
+.rt-master-enemy-btns {
+  display: flex;
+  gap: 4px;
+}
+
+.rt-mini-btn {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.48rem;
+  padding: 2px 5px;
+  background: rgba(255, 174, 0, 0.08);
+  border: 1px solid rgba(255, 174, 0, 0.35);
+  color: #ffae00;
+  cursor: pointer;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  transition: all 0.15s;
+}
+.rt-mini-btn:hover {
+  background: #ffae00;
+  color: #000;
+}
+
+/* ── Controles do Piloto ── */
+.rt-pilot-controls {
+  padding: 0.75rem;
+  border-top: 1px solid rgba(74, 158, 255, 0.2);
+  background: rgba(74, 158, 255, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  z-index: 1;
+  position: relative;
+}
+
+.rt-ctrl-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.52rem;
+  color: rgba(74, 158, 255, 0.6);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.rt-accel-row {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.rt-accel-input {
+  flex: 1;
+  padding: 0.4rem 0.6rem;
+  background: rgba(10, 15, 20, 0.95);
+  border: 1px solid rgba(74, 158, 255, 0.35);
+  border-left: 2px solid #4a9eff;
+  color: #fff;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  font-weight: 700;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.rt-accel-input:focus {
+  border-color: #4a9eff;
+  box-shadow: 0 0 8px rgba(74, 158, 255, 0.2);
+}
+
+.rt-accel-input::placeholder {
+  color: rgba(255, 255, 255, 0.2);
+}
+
+.rt-accel-btn {
+  padding: 0.4rem 0.75rem;
+  background: rgba(74, 158, 255, 0.12);
+  border: 1px solid rgba(74, 158, 255, 0.5);
+  color: #4a9eff;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.rt-accel-btn:hover {
+  background: #4a9eff;
+  color: #000;
+  box-shadow: 0 0 12px rgba(74, 158, 255, 0.4);
+}
+
+.rt-fail-btn {
+  width: 100%;
+  padding: 0.5rem;
+  background: rgba(255, 174, 0, 0.08);
+  border: 1px solid rgba(255, 174, 0, 0.4);
+  color: #ffae00;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.58rem;
+  font-weight: 900;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.15s;
+  position: relative;
+  overflow: hidden;
+}
+
+.rt-fail-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    45deg, transparent, transparent 4px,
+    rgba(255, 174, 0, 0.05) 4px, rgba(255, 174, 0, 0.05) 8px
+  );
+}
+
+.rt-fail-btn:hover {
+  background: rgba(255, 174, 0, 0.2);
+  border-color: #ffae00;
+  box-shadow: 0 0 16px rgba(255, 174, 0, 0.3);
+}
+
+/* ── Controles do Mestre ── */
+.rt-master-controls {
+  padding: 0.75rem;
+  border-top: 1px solid rgba(255, 174, 0, 0.2);
+  background: rgba(255, 174, 0, 0.02);
+  z-index: 1;
+  position: relative;
+}
+
+.rt-resolve-btn {
+  width: 100%;
+  padding: 0.6rem;
+  background: rgba(255, 174, 0, 0.1);
+  border: 1px solid rgba(255, 174, 0, 0.5);
+  color: #ffae00;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.rt-resolve-btn:hover:not(:disabled) {
+  background: #ffae00;
+  color: #000;
+  box-shadow: 0 0 20px rgba(255, 174, 0, 0.4);
+}
+
+.rt-resolve-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* ── Scrollbar interna ── */
+.rt-enemy-list::-webkit-scrollbar { width: 4px; }
+.rt-enemy-list::-webkit-scrollbar-track { background: transparent; }
+.rt-enemy-list::-webkit-scrollbar-thumb { background: rgba(255, 60, 30, 0.3); }
+
+/* ═══════════════════════════════════════════════════════════
+   THEME: STARFIELD (Exclusivo para o ShipDashboard)
+   ═══════════════════════════════════════════════════════════ */
+
+.rt-root.theme-starfield {
+  background: #0e1c22;
+  border: 2px solid #d0d0d0;
+  border-left: 2px solid #d0d0d0; /* Remove a borda grossa vermelha */
+  box-shadow: inset 0 0 20px rgba(200, 200, 200, 0.03);
+}
+
+/* Remove os pontilhados de fundo pesados */
+.rt-root.theme-starfield::before {
+  display: none; 
+}
+
+.rt-root.theme-starfield .rt-header {
+  background: #111926;
+  border-bottom: 2px solid #d0d0d0;
+}
+
+.rt-root.theme-starfield .rt-subtitle {
+  color: #ffffff;
+}
+
+.rt-root.theme-starfield .rt-eyebrow {
+  color: #809aab;
+}
+
+.rt-root.theme-starfield .rt-enemy-row {
+  background: rgba(17, 25, 38, 0.6); /* Cor #111926 com transparência */
+  border: 1px solid rgba(128, 154, 171, 0.2);
+  border-left: 3px solid #d0d0d0;
+}
+
+.rt-root.theme-starfield .rt-enemy-name {
+  color: #ffffff;
+}
+
+.rt-root.theme-starfield .rt-pilot-controls,
+.rt-root.theme-starfield .rt-master-controls {
+  background: #111926;
+  border-top: 2px solid #d0d0d0;
+}
+
+/* Campos e Botões de Piloto */
+.rt-root.theme-starfield .rt-accel-input {
+  background: #0e1c22;
+  border: 1px solid #809aab;
+  border-left: 2px solid #64a9b8;
+  color: #ffffff;
+}
+
+.rt-root.theme-starfield .rt-accel-input:focus {
+  border-color: #64a9b8;
+  box-shadow: 0 0 8px rgba(100, 169, 184, 0.2);
+}
+
+.rt-root.theme-starfield .rt-accel-btn {
+  background: transparent;
+  border: 2px solid #d0d0d0;
+  color: #d0d0d0;
+}
+
+.rt-root.theme-starfield .rt-accel-btn:hover {
+  background: #ffffff;
+  color: #000000;
+  border-color: #ffffff;
+  box-shadow: 0 0 15px rgba(255, 255, 255, 0.4);
+}
+
+.rt-root.theme-starfield .rt-fail-btn {
+  background: rgba(216, 147, 41, 0.1);
+  border: 1px solid #d89329;
+  color: #d89329;
+}
+
+.rt-root.theme-starfield .rt-fail-btn:hover {
+  background: rgba(216, 147, 41, 0.2);
+  box-shadow: 0 0 16px rgba(216, 147, 41, 0.3);
+}
+
+/* Textos e Barras de Velocidade */
+.rt-root.theme-starfield .rt-speed-val {
+  color: #64a9b8;
+}
+
+.rt-root.theme-starfield .rt-speed-max {
+  color: #809aab;
+}
+
+.rt-root.theme-starfield .rt-speed-bar-fill.high { background: #a2312d; box-shadow: 0 0 6px rgba(162, 49, 45, 0.6); }
+.rt-root.theme-starfield .rt-speed-bar-fill.mid  { background: #d89329; box-shadow: 0 0 6px rgba(216, 147, 41, 0.6); }
+.rt-root.theme-starfield .rt-speed-bar-fill.low  { background: #64a9b8; box-shadow: 0 0 6px rgba(100, 169, 184, 0.6); }
+
+/* Tags de Vantagem / Punição */
+.rt-root.theme-starfield .rt-mod-tag.green  { color: #64a9b8; border-color: rgba(100, 169, 184, 0.4); background: rgba(100, 169, 184, 0.08); }
+.rt-root.theme-starfield .rt-mod-tag.yellow { color: #d89329; border-color: rgba(216, 147, 41, 0.4); background: rgba(216, 147, 41, 0.08); }
+.rt-root.theme-starfield .rt-mod-tag.red    { color: #a2312d; border-color: rgba(162, 49, 45, 0.4); background: rgba(162, 49, 45, 0.08); }

@@ -6,7 +6,6 @@ import { getAllShips, updateShipConfig, setEnemyShipStatus, clearDestroyedEnemie
 import TerminalCombate from "./TerminalCombate";
 import ConfirmModal from "./ConfirmModal";
 
-
 const applySorting = (data, config) => {
   const { key, direction } = config;
   return [...data].sort((a, b) => {
@@ -36,6 +35,12 @@ const AdminDashboard = ({ onLogout }) => {
   const [isCombatMode,  setIsCombatMode]  = useState(false);
   const [repairRequests, setRepairRequests] = useState([]);
 
+  // Estados para a Aba 04 (Alterar Mestre)
+  const [alterSelectedId, setAlterSelectedId] = useState("");
+  const [alterDraft, setAlterDraft] = useState(null);
+  const [manualSpeed, setManualSpeed] = useState("");
+
+  
   useEffect(() => {
     const checkRequests = () => {
       const reqs = JSON.parse(localStorage.getItem("repair_requests") || "[]");
@@ -45,36 +50,22 @@ const AdminDashboard = ({ onLogout }) => {
     return () => clearInterval(interval);
   }, []);
 
-  // ─── Aceitar reparo ──────────────────────────────────────────────────────
   const handleAcceptRepair = (req) => {
-    // Reparo de ESCUDO
     if (req.isShield) {
       repairShieldByAdmin(req.shipId);
-      const filtered = repairRequests.filter(r => r.id !== req.id);
-      localStorage.setItem("repair_requests", JSON.stringify(filtered));
-      refreshData();
-      return;
-    }
-
-    // Reparo de MOTORES
-    if (req.isEngines) {
+    } else if (req.isEngines) {
       repairEnginesByAdmin(req.shipId);
-      const filtered = repairRequests.filter(r => r.id !== req.id);
-      localStorage.setItem("repair_requests", JSON.stringify(filtered));
-      refreshData();
-      return;
-    }
-
-    // Reparo de TORRETA (lógica original)
-    const ships = getAllShips();
-    const ship  = ships[req.shipId];
-    if (ship && ship.activeCrew) {
-      const member = ship.activeCrew.find(m => m.id === req.moduleId);
-      if (member) {
-        member.moduleStatus     = 'operacional';
-        member.turnosParaReparo = 0;
-        enforceAttributeLimits(ship);
-        localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
+    } else {
+      const ships = getAllShips();
+      const ship  = ships[req.shipId];
+      if (ship && ship.activeCrew) {
+        const member = ship.activeCrew.find(m => m.id === req.moduleId);
+        if (member) {
+          member.moduleStatus     = 'operacional';
+          member.turnosParaReparo = 0;
+          enforceAttributeLimits(ship);
+          localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
+        }
       }
     }
     const filtered = repairRequests.filter(r => r.id !== req.id);
@@ -88,13 +79,15 @@ const AdminDashboard = ({ onLogout }) => {
   };
 
   useEffect(() => {
-    if (activeTab === "fleet") {
+    if (activeTab === "fleet" || activeTab === "alter") {
       const data = getAllShips();
       setFleetData(data);
-      const firstShipId = Object.keys(data)[0];
-      if (firstShipId && !selectedShipId) handleSelectShip(firstShipId, data);
+      if (activeTab === "fleet" && !selectedShipId) {
+        const firstShipId = Object.keys(data)[0];
+        if (firstShipId) handleSelectShip(firstShipId, data);
+      }
     }
-  }, [activeTab, selectedShipId]);
+  }, [activeTab]);
 
   const handleSelectShip = (shipId, data = fleetData) => {
     setSelectedShipId(shipId);
@@ -112,6 +105,48 @@ const AdminDashboard = ({ onLogout }) => {
     setFleetData(getAllShips());
     alert(`Especificações da classe ${editForm.name} atualizadas na rede!`);
   };
+
+  // ─── LÓGICA DA ABA 04 (ALTERAR) ─────────────────────────────────────────────
+  const handleSelectAlterShip = (shipId) => {
+    setAlterSelectedId(shipId);
+    if (!shipId) {
+      setAlterDraft(null);
+      return;
+    }
+    const data = getAllShips();
+    setAlterDraft(JSON.parse(JSON.stringify(data[shipId])));
+  };
+
+  const handleSaveAlterations = () => {
+    if (!alterDraft) return;
+    const ships = getAllShips();
+    const updatedShip = { ...alterDraft };
+    
+    enforceAttributeLimits(updatedShip);
+    
+    ships[updatedShip.id] = updatedShip;
+    localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
+    window.dispatchEvent(new Event("storage"));
+    setFleetData(ships);
+    alert(`Alterações forçadas em [${updatedShip.name}] aplicadas ao banco de dados!`);
+    refreshData();
+  };
+
+  const handleClearLocks = (memberId) => {
+    setAlterDraft(prev => {
+      const next = { ...prev };
+      const member = next.activeCrew.find(m => m.id === memberId);
+      if (member) {
+        member.missileTarget = null;
+        member.missileLockLevel = 0;
+        member.missileReady = false;
+        member.ballisticTarget = null;
+        member.ballisticLockLevel = 0;
+      }
+      return next;
+    });
+  };
+  // ────────────────────────────────────────────────────────────────────────────
 
   const refreshData = () => {
     const rawMappedData = playersList.map((player) => {
@@ -262,6 +297,9 @@ const AdminDashboard = ({ onLogout }) => {
             >
               [ 03. TERMINAL ]
             </button>
+            <button className={`admin-tab-btn ${activeTab === "alter" ? "active" : ""}`} onClick={() => setActiveTab("alter")}>
+              [ 04. ALTERAR ]
+            </button>
           </div>
 
           {/* ABA 01: TRIPULAÇÃO */}
@@ -346,18 +384,6 @@ const AdminDashboard = ({ onLogout }) => {
                     >
                       {ship.isEnemy ? `[HOSTIL] ` : `[ALIADA] `}
                       {ship.name.toUpperCase()}
-                      {/* Indicador de escudo avariado */}
-                      {ship.shieldStatus && ship.shieldStatus !== 'operacional' && (
-                        <span style={{ marginLeft: '6px', color: ship.shieldStatus === 'destruida' ? '#ff3c1e' : '#ffae00', fontSize: '0.7rem' }}>
-                          🛡{ship.shieldStatus === 'destruida' ? '✗' : '⚡'}
-                        </span>
-                      )}
-                      {/* Indicador de motores avariados */}
-                      {ship.enginesStatus && ship.enginesStatus !== 'operacional' && (
-                        <span style={{ marginLeft: '4px', color: ship.enginesStatus === 'destruida' ? '#ff3c1e' : '#ff8c00', fontSize: '0.7rem' }}>
-                          ⚙{ship.enginesStatus === 'destruida' ? '✗' : '⚡'}
-                        </span>
-                      )}
                     </div>
                   ))}
                 </div>
@@ -365,10 +391,8 @@ const AdminDashboard = ({ onLogout }) => {
 
               <div className="fleet-editor-panel">
                 <h3 className="fleet-panel-title">ESPECIFICAÇÕES DO SISTEMA</h3>
-
                 {selectedShipId && (
                   <div className="fleet-form">
-
                     {fleetData[selectedShipId]?.isEnemy && (
                       <div className="fleet-form-group">
                         <label>STATUS DE COMBATE</label>
@@ -377,10 +401,18 @@ const AdminDashboard = ({ onLogout }) => {
                           style={{ color: fleetData[selectedShipId].status === "ativa" ? '#ff4a4a' : '#fff' }}
                           value={fleetData[selectedShipId].status || "desativada"}
                           onChange={(e) => {
-                            setEnemyShipStatus(selectedShipId, e.target.value);
-                            setFleetData(getAllShips());
-                            refreshData();
-                          }}
+                          const novoStatus = e.target.value;
+                          setEnemyShipStatus(selectedShipId, novoStatus);
+                          setFleetData(getAllShips());
+                          refreshData();
+                          
+                          // --- ADICIONE ESTE BLOCO ---
+                          // Dispara o evento de sonar em todas as abas abertas se ativar uma nave
+                          if (novoStatus === "ativa") {
+                            localStorage.setItem("enemy_activated_event", Date.now().toString());
+                          }
+                          // ---------------------------
+                        }}
                         >
                           <option value="desativada">DESATIVADA (Oculta)</option>
                           <option value="ativa">ATIVA (Combate)</option>
@@ -388,78 +420,6 @@ const AdminDashboard = ({ onLogout }) => {
                         </select>
                       </div>
                     )}
-
-                    {/* PAINEL DE ESCUDOS */}
-                    {(() => {
-                      const sel = fleetData[selectedShipId];
-                      const ss  = sel?.shieldStatus || 'operacional';
-                      const st  = sel?.shieldTurnosParaReparo || 0;
-                      return ss !== 'operacional' ? (
-                        <div className="fleet-form-group" style={{ padding: '1rem', background: ss === 'destruida' ? 'rgba(255,60,30,0.07)' : 'rgba(255,174,0,0.07)', border: `1px solid ${ss === 'destruida' ? '#ff3c1e' : '#ffae00'}` }}>
-                          <label style={{ color: ss === 'destruida' ? '#ff3c1e' : '#ffae00' }}>
-                            🛡 ESCUDOS — {ss === 'destruida' ? 'DESTRUÍDOS' : 'AVARIADOS'} ({st} TURNO{st !== 1 ? 'S' : ''})
-                          </label>
-                          <button
-                            className="fleet-save-btn"
-                            style={{ marginTop: '0.5rem', background: 'rgba(42,255,140,0.1)', color: '#2aff8c', border: '1px solid #2aff8c' }}
-                            onClick={() => {
-                              showConfirm({
-                                title: "REPARO DE ESCUDOS",
-                                message: `Restaurar os escudos de ${sel.name} imediatamente?`,
-                                variant: "success",
-                                confirmLabel: "REPARAR",
-                                onConfirm: () => {
-                                  repairShieldByAdmin(selectedShipId);
-                                  setFleetData(getAllShips());
-                                  refreshData();
-                                }
-                              });
-                            }}
-                          >
-                            REPARAR ESCUDOS AGORA
-                          </button>
-                        </div>
-                      ) : null;
-                    })()}
-
-                    {/* PAINEL DE MOTORES */}
-                    {(() => {
-                      const sel = fleetData[selectedShipId];
-                      const es  = sel?.enginesStatus || 'operacional';
-                      const et  = sel?.enginesTurnosParaReparo || 0;
-                      return es !== 'operacional' ? (
-                        <div className="fleet-form-group" style={{ padding: '1rem', background: es === 'destruida' ? 'rgba(255,60,30,0.07)' : 'rgba(255,140,0,0.07)', border: `1px solid ${es === 'destruida' ? '#ff3c1e' : '#ff8c00'}` }}>
-                          <label style={{ color: es === 'destruida' ? '#ff3c1e' : '#ff8c00' }}>
-                            ⚙ MOTORES — {es === 'destruida' ? 'DESTRUÍDOS' : 'AVARIADOS'} ({et} TURNO{et !== 1 ? 'S' : ''})
-                          </label>
-                          <button
-                            className="fleet-save-btn"
-                            style={{ marginTop: '0.5rem', background: 'rgba(42,255,140,0.1)', color: '#2aff8c', border: '1px solid #2aff8c' }}
-                            onClick={() => {
-                              showConfirm({
-                                title: "REPARO DE MOTORES",
-                                message: `Restaurar os motores de ${sel.name} imediatamente?`,
-                                variant: "success",
-                                confirmLabel: "REPARAR",
-                                onConfirm: () => {
-                                  repairEnginesByAdmin(selectedShipId);
-                                  setFleetData(getAllShips());
-                                  refreshData();
-                                }
-                              });
-                            }}
-                          >
-                            REPARAR MOTORES AGORA
-                          </button>
-                        </div>
-                      ) : null;
-                    })()}
-
-                    <div className="fleet-form-group">
-                      <label>ID DE REGISTRO</label>
-                      <input type="text" value={selectedShipId} disabled className="fleet-input locked" />
-                    </div>
-
                     <div className="fleet-form-group">
                       <label>NOME DA CLASSE</label>
                       <input
@@ -470,7 +430,6 @@ const AdminDashboard = ({ onLogout }) => {
                         disabled={fleetData[selectedShipId]?.isEnemy}
                       />
                     </div>
-
                     <div className="fleet-form-group">
                       <label>INTEGRIDADE ESTRUTURAL (HP)</label>
                       <input
@@ -480,7 +439,6 @@ const AdminDashboard = ({ onLogout }) => {
                         className="fleet-input"
                       />
                     </div>
-
                     <div className="fleet-form-group">
                       <label>PONTOS TOTAIS DE REATOR</label>
                       <input
@@ -490,15 +448,219 @@ const AdminDashboard = ({ onLogout }) => {
                         className="fleet-input highlight-input"
                       />
                     </div>
-
-                    <button className="fleet-save-btn" onClick={handleSaveShip}>
-                      SALVAR ESPECIFICAÇÕES
-                    </button>
+                    <button className="fleet-save-btn" onClick={handleSaveShip}>SALVAR ESPECIFICAÇÕES</button>
                   </div>
                 )}
               </div>
             </div>
           )}
+
+          {/* ABA 04: ALTERAR (GOD MODE DO MESTRE) - Versão Compacta */}
+          {activeTab === "alter" && (
+            <div style={{ padding: '0.5rem', color: '#fff', height: '65vh', overflowY: 'auto', paddingBottom: '2rem', fontSize: '0.75rem' }}>
+              <div style={{ marginBottom: '0.5rem' }}>
+                <label style={{ display: 'block', fontSize: '0.7rem', color: '#888', marginBottom: '0.2rem' }}>
+                  SELECIONAR ALVO PARA SOBRESCRITA (Somente Aliadas e Hostis Ativas)
+                </label>
+                <select 
+                  className="fleet-input" 
+                  style={{ width: '100%', maxWidth: '350px', padding: '0.3rem', fontSize: '0.75rem' }}
+                  value={alterSelectedId}
+                  onChange={(e) => handleSelectAlterShip(e.target.value)}
+                >
+                  <option value="">-- Selecione uma Nave --</option>
+                  {Object.values(fleetData)
+                    .filter(ship => !ship.isEnemy || ship.status === 'ativa')
+                    .map(ship => (
+                      <option key={ship.id} value={ship.id}>
+                        {ship.isEnemy ? "[HOSTIL]" : "[ALIADA]"} {ship.name}
+                      </option>
+                  ))}
+                </select>
+              </div>
+
+              {alterDraft && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  
+                  {/* COLUNA ESQUERDA: GERAL E NAVEGAÇÃO */}
+                  <div>
+                    <h4 style={{ color: '#4a9eff', borderBottom: '1px solid #4a9eff', paddingBottom: '0.3rem', marginBottom: '0.5rem', fontSize: '0.85rem' }}>SISTEMAS GERAIS & NAVEGAÇÃO</h4>
+                    
+                    <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                      <div className="fleet-form-group" style={{ flex: 1, marginBottom: 0 }}>
+                        <label style={{ fontSize: '0.65rem', marginBottom: '0.1rem' }}>HP ATUAL</label>
+                        <input 
+                          type="number" className="fleet-input" style={{ padding: '0.3rem', fontSize: '0.75rem' }}
+                          value={alterDraft.currentHP} 
+                          onChange={(e) => setAlterDraft({...alterDraft, currentHP: parseInt(e.target.value) || 0})}
+                        />
+                      </div>
+                      <div className="fleet-form-group" style={{ flex: 1, marginBottom: 0 }}>
+                        <label style={{ fontSize: '0.65rem', marginBottom: '0.1rem' }}>MAX HP</label>
+                        <input 
+                          type="number" className="fleet-input" disabled style={{ padding: '0.3rem', fontSize: '0.75rem' }}
+                          value={alterDraft.maxHP} 
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                      {alterDraft.isEnemy && (
+                        <div className="fleet-form-group" style={{ flex: 1, marginBottom: 0 }}>
+                          <label style={{ fontSize: '0.65rem', marginBottom: '0.1rem' }}>PROXIMIDADE</label>
+                          <select 
+                            className="fleet-input" style={{ padding: '0.3rem', fontSize: '0.7rem' }}
+                            value={alterDraft.proximity || 3}
+                            onChange={(e) => setAlterDraft({...alterDraft, proximity: parseInt(e.target.value)})}
+                          >
+                            <option value="1">P1 (Contato/+2)</option>
+                            <option value="2">P2 (Perto/+1)</option>
+                            <option value="3">P3 (Médio)</option>
+                            <option value="4">P4 (Longe/÷2)</option>
+                            <option value="5">P5 (Bloqueado)</option>
+                          </select>
+                        </div>
+                      )}
+                      
+                      <div className="fleet-form-group" style={{ flex: 1, marginBottom: 0 }}>
+                        <label style={{ fontSize: '0.65rem', marginBottom: '0.1rem' }}>DERRAPAGEM</label>
+                        <select 
+                          className="fleet-input highlight-input" style={{ padding: '0.3rem', fontSize: '0.7rem' }}
+                          value={alterDraft.isDerrapando ? "sim" : "nao"}
+                          onChange={(e) => setAlterDraft({...alterDraft, isDerrapando: e.target.value === "sim"})}
+                        >
+                          <option value="nao">Não (Normal)</option>
+                          <option value="sim">Sim (-20% Prec)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <h4 style={{ color: '#ffae00', borderBottom: '1px solid #ffae00', paddingBottom: '0.3rem', marginBottom: '0.5rem', marginTop: '1rem', fontSize: '0.85rem' }}>MÓDULOS DE NAVE</h4>
+                    
+                    {/* ESCUDOS */}
+                    <div style={{ marginBottom: '0.5rem', padding: '0.3rem', background: 'rgba(255,255,255,0.05)' }}>
+                      <label style={{ color: '#ffae00', fontWeight: 'bold', fontSize: '0.7rem' }}>ESCUDOS</label>
+                      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.2rem' }}>
+                        <select 
+                          className="fleet-input" style={{ flex: 2, padding: '0.2rem', fontSize: '0.7rem' }}
+                          value={alterDraft.shieldStatus || 'operacional'}
+                          onChange={(e) => setAlterDraft({...alterDraft, shieldStatus: e.target.value})}
+                        >
+                          <option value="operacional">Operacional</option>
+                          <option value="avariada">Avariado</option>
+                          <option value="destruida">Destruído</option>
+                        </select>
+                        <input 
+                          type="number" className="fleet-input" style={{ flex: 1, padding: '0.2rem', fontSize: '0.7rem' }} placeholder="Turnos"
+                          value={alterDraft.shieldTurnosParaReparo || 0}
+                          onChange={(e) => setAlterDraft({...alterDraft, shieldTurnosParaReparo: parseInt(e.target.value) || 0})}
+                        />
+                      </div>
+                    </div>
+
+                    {/* MOTORES */}
+                    <div style={{ marginBottom: '0.5rem', padding: '0.3rem', background: 'rgba(255,255,255,0.05)' }}>
+                      <label style={{ color: '#ff8c00', fontWeight: 'bold', fontSize: '0.7rem' }}>MOTORES</label>
+                      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.2rem' }}>
+                        <select 
+                          className="fleet-input" style={{ flex: 2, padding: '0.2rem', fontSize: '0.7rem' }}
+                          value={alterDraft.enginesStatus || 'operacional'}
+                          onChange={(e) => setAlterDraft({...alterDraft, enginesStatus: e.target.value})}
+                        >
+                          <option value="operacional">Operacional</option>
+                          <option value="avariada">Avariado</option>
+                          <option value="destruida">Destruído</option>
+                        </select>
+                        <input 
+                          type="number" className="fleet-input" style={{ flex: 1, padding: '0.2rem', fontSize: '0.7rem' }} placeholder="Turnos"
+                          value={alterDraft.enginesTurnosParaReparo || 0}
+                          onChange={(e) => setAlterDraft({...alterDraft, enginesTurnosParaReparo: parseInt(e.target.value) || 0})}
+                        />
+                      </div>
+                    </div>
+
+                    {/* VELOCIDADE ATUAL */}
+                    <div style={{ marginBottom: '0.5rem', padding: '0.3rem', background: 'rgba(255,255,255,0.05)' }}>
+                      <label style={{ color: '#2aff8c', fontWeight: 'bold', fontSize: '0.7rem' }}>VELOCIDADE ATUAL (Forçada)</label>
+                      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.2rem' }}>
+                        <input 
+                          type="number" 
+                          className="fleet-input" 
+                          style={{ width: '100%', padding: '0.2rem', fontSize: '0.7rem' }} 
+                          placeholder="Ex: 3"
+                          value={alterDraft.currentSpeed || 0}
+                          onChange={(e) => setAlterDraft({...alterDraft, currentSpeed: parseInt(e.target.value) || 0})}
+                        />
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* COLUNA DIREITA: TRIPULAÇÃO & ARMAS */}
+                  <div>
+                    <h4 style={{ color: '#ff4a4a', borderBottom: '1px solid #ff4a4a', paddingBottom: '0.3rem', marginBottom: '0.5rem', fontSize: '0.85rem' }}>MÓDULOS DE TORRETAS & TRIPULAÇÃO</h4>
+                    
+                    {alterDraft.activeCrew && alterDraft.activeCrew.length > 0 ? (
+                      alterDraft.activeCrew.map((member, idx) => (
+                        <div key={idx} style={{ marginBottom: '0.5rem', padding: '0.3rem', background: 'rgba(255,255,255,0.05)', borderLeft: '3px solid #ff4a4a' }}>
+                          <label style={{ display: 'block', color: '#fff', fontWeight: 'bold', marginBottom: '0.3rem', fontSize: '0.7rem' }}>
+                            {member.function} ({member.id})
+                          </label>
+                          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.3rem' }}>
+                            <select 
+                              className="fleet-input" style={{ flex: 2, padding: '0.2rem', fontSize: '0.7rem' }}
+                              value={member.moduleStatus || 'operacional'}
+                              onChange={(e) => {
+                                const newCrew = [...alterDraft.activeCrew];
+                                newCrew[idx].moduleStatus = e.target.value;
+                                setAlterDraft({...alterDraft, activeCrew: newCrew});
+                              }}
+                            >
+                              <option value="operacional">Operacional</option>
+                              <option value="avariada">Avariado</option>
+                              <option value="destruida">Destruído</option>
+                            </select>
+                            <input 
+                              type="number" className="fleet-input" style={{ flex: 1, padding: '0.2rem', fontSize: '0.7rem' }} placeholder="Turnos"
+                              value={member.turnosParaReparo || 0}
+                              onChange={(e) => {
+                                const newCrew = [...alterDraft.activeCrew];
+                                newCrew[idx].turnosParaReparo = parseInt(e.target.value) || 0;
+                                setAlterDraft({...alterDraft, activeCrew: newCrew});
+                              }}
+                            />
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.65rem', color: '#888' }}>
+                            <span>
+                              Míssil: {member.missileLockLevel || 0}/3 | Balístico: {member.ballisticLockLevel || 0}/3
+                            </span>
+                            <button 
+                              onClick={() => handleClearLocks(member.id)}
+                              style={{ background: 'transparent', border: '1px solid #888', color: '#888', padding: '2px 4px', cursor: 'pointer', fontSize: '0.6rem' }}
+                            >
+                              LIMPAR TRAVAS
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div style={{ color: '#888', fontSize: '0.7rem' }}>Sem tripulação ativa para alterar.</div>
+                    )}
+
+                    <button 
+                      className="fleet-save-btn highlight-input" 
+                      style={{ marginTop: '1rem', width: '100%', padding: '0.5rem', fontSize: '0.8rem' }}
+                      onClick={handleSaveAlterations}
+                    >
+                      APLICAR ALTERAÇÕES À REDE
+                    </button>
+                  </div>
+                  
+                </div>
+              )}
+            </div>
+          )}
+
         </div>
 
         <div className="datapad-right-spine"></div>

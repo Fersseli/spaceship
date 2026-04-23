@@ -474,3 +474,22 @@
   font-weight: 400;
   letter-spacing: 1px;
 }
+
+/* Estilização da barra de rolagem para a aba ALTERAR */
+.admin-dashboard-container ::-webkit-scrollbar {
+  width: 6px;
+}
+
+.admin-dashboard-container ::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+}
+
+.admin-dashboard-container ::-webkit-scrollbar-thumb {
+  background: rgba(74, 158, 255, 0.5); /* Azul neon translúcido */
+  border-radius: 4px;
+}
+
+.admin-dashboard-container ::-webkit-scrollbar-thumb:hover {
+  background: rgba(74, 158, 255, 0.8);
+}

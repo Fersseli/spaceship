@@ -11,12 +11,15 @@ import {
   incrementBallisticLock,
   isBallisticLockEligible,
   getShipMaxAttributes,
-  enforceAttributeLimits
+  enforceAttributeLimits,
+  getProximityModifiers,
+  ensureNavigationFields,
 } from "../utils/mockApi";
 import { getEffect } from "../utils/effectHelpers";
 import { rollDamage, parseShield, rollHit } from "../utils/diceHelpers";
 import "../styles/TerminalCombate.css";
 import ConfirmModal from "./ConfirmModal";
+import RadarTatico from "./RadarTatico";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -51,14 +54,13 @@ const CrewSlot = ({ member, attackerShip, allShips, onFire }) => {
   const [open, setOpen] = useState(false);
   const [targetId, setTargetId] = useState("");
 
-  // Sincroniza o targetId com o alvo salvo (míssil ou balístico)
   useEffect(() => {
-    if (member.missileTarget)   setTargetId(member.missileTarget);
+    if (member.missileTarget)        setTargetId(member.missileTarget);
     else if (member.ballisticTarget) setTargetId(member.ballisticTarget);
   }, [member.missileTarget, member.ballisticTarget]);
 
-  const fires    = canFire(member, attackerShip.shipClass);
-  const missiles = usesMissiles(member, attackerShip.shipClass);
+  const fires       = canFire(member, attackerShip.shipClass);
+  const missiles    = usesMissiles(member, attackerShip.shipClass);
   const usesBallistic = isBallisticLockEligible(member, attackerShip);
 
   const precisao    = getPrecisao(member);
@@ -66,14 +68,15 @@ const CrewSlot = ({ member, attackerShip, allShips, onFire }) => {
   const turnos      = member.turnosParaReparo || 0;
   const isOperacional = status === 'operacional';
 
-  // ── Estado do lock de míssil ──
   const missileLockLevel   = member.missileLockLevel   || 0;
   const isMissileAiming    = !!member.missileTarget;
   const isMissileReady     = member.missileReady;
-
-  // ── Estado do lock balístico ──
   const ballisticLockLevel = member.ballisticLockLevel || 0;
   const isBallisticAiming  = !!member.ballisticTarget;
+
+  // Modificadores de proximidade para exibição no slot
+  const proximity = attackerShip.proximity ?? 3;
+  const proxMods  = getProximityModifiers(proximity, attackerShip.isDerrapando);
 
   const targetOptions = Object.values(allShips)
     .filter((s) => s.id !== attackerShip.id && s.status !== "desativada" && s.status !== "destruida")
@@ -101,8 +104,8 @@ const CrewSlot = ({ member, attackerShip, allShips, onFire }) => {
     }
   };
 
-  // ── Label e comportamento do botão de disparo ──
   const getFireLabel = () => {
+    if (proxMods.blocked) return "FORA DE ALCANCE";
     if (missiles) {
       if (!isMissileAiming) return "MIRAR MÍSSIL";
       if (!isMissileReady)  return "MIRANDO...";
@@ -118,7 +121,7 @@ const CrewSlot = ({ member, attackerShip, allShips, onFire }) => {
 
   const isFireDisabled = () => {
     if (!targetId) return true;
-    // Míssil: bloqueado enquanto não estiver pronto
+    if (proxMods.blocked) return true;
     if (missiles && isMissileAiming && !isMissileReady) return true;
     return false;
   };
@@ -166,13 +169,24 @@ const CrewSlot = ({ member, attackerShip, allShips, onFire }) => {
         </div>
       )}
 
-      {/* ── Indicador de lock BALÍSTICO (amarelo-esverdeado) ── */}
+      {/* ── Indicador de lock BALÍSTICO ── */}
       {usesBallistic && (
         <div className="tc-ballistic-lock-indicator">
           <span className="tc-lock-label tc-lock-label--ballistic">LOCK BAL:</span>
           <span className={`tc-lock-box tc-lock-box--ballistic ${ballisticLockLevel >= 1 ? 'filled' : ''}`}></span>
           <span className={`tc-lock-box tc-lock-box--ballistic ${ballisticLockLevel >= 2 ? 'filled' : ''}`}></span>
           <span className={`tc-lock-box tc-lock-box--ballistic ${ballisticLockLevel >= 3 ? 'filled blink-green' : ''}`}></span>
+        </div>
+      )}
+
+      {/* ── Indicador de Proximidade no Slot ── */}
+      {proximity !== 3 && (
+        <div className={`tc-prox-slot-badge ${proxMods.blocked ? 'blocked' : proxMods.advantageBonus > 0 ? 'advantage' : 'penalty'}`}>
+          P{proximity}
+          {proxMods.blocked        && ' 🚫 BLOQUEADO'}
+          {proxMods.advantageBonus > 0 && ` +${proxMods.advantageBonus}d VTG`}
+          {proxMods.precisionMultiplier < 1 && ' PREC÷2'}
+          {attackerShip.isDerrapando && ' −20%'}
         </div>
       )}
 
@@ -195,11 +209,17 @@ const CrewSlot = ({ member, attackerShip, allShips, onFire }) => {
             disabled={(missiles && isMissileAiming) || (usesBallistic && isBallisticAiming)}
           >
             <option value="">— Selecionar Alvo —</option>
-            {targetOptions.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.isEnemy ? "[HOSTIL]" : "[ALIADA]"} {s.name}
-              </option>
-            ))}
+            {targetOptions.map((s) => {
+              const tProx = s.proximity;
+              const tBlocked = tProx !== undefined && getProximityModifiers(tProx).blocked;
+              return (
+                <option key={s.id} value={s.id} disabled={tBlocked}>
+                  {s.isEnemy ? "[HOSTIL]" : "[ALIADA]"} {s.name}
+                  {tProx !== undefined ? ` [P${tProx}]` : ""}
+                  {tBlocked ? " 🚫" : ""}
+                </option>
+              );
+            })}
           </select>
 
           <div className="tc-fire-row">
@@ -208,7 +228,6 @@ const CrewSlot = ({ member, attackerShip, allShips, onFire }) => {
               onClick={() => {
                 setOpen(false);
                 setTargetId("");
-                // Cancela lock de míssil se existir
                 if (member.missileTarget) {
                   const ships = getAllShips();
                   const ship  = ships[attackerShip.id];
@@ -220,14 +239,13 @@ const CrewSlot = ({ member, attackerShip, allShips, onFire }) => {
                     localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
                   }
                 }
-                // Cancela lock balístico se existir
                 if (member.ballisticTarget) handleCancelBallistic();
               }}
             >
               ✕
             </button>
             <button
-              className={`tc-fire-btn ${usesBallistic && isBallisticAiming && ballisticLockLevel >= 1 ? 'tc-fire-btn--ballistic-lock' : ''}`}
+              className={`tc-fire-btn ${usesBallistic && isBallisticAiming && ballisticLockLevel >= 1 ? 'tc-fire-btn--ballistic-lock' : ''} ${proxMods.blocked ? 'tc-fire-btn--blocked' : ''}`}
               disabled={isFireDisabled()}
               onClick={handleDisparo}
             >
@@ -235,7 +253,6 @@ const CrewSlot = ({ member, attackerShip, allShips, onFire }) => {
             </button>
           </div>
 
-          {/* Aviso de vantagem balística */}
           {usesBallistic && isBallisticAiming && ballisticLockLevel >= 2 && (
             <div className="tc-ballistic-advantage-alert">
               {ballisticLockLevel === 2 ? "VANTAGEM: ROLE 2d100" : "SUPER VANTAGEM: ROLE 3d100"} — USE O MENOR!
@@ -300,6 +317,13 @@ const TacticalCard = ({ ship, allShips, onFire, onUpdate }) => {
   const enginesStatus = ship.enginesStatus || 'operacional';
   const enginesTurnos = ship.enginesTurnosParaReparo || 0;
 
+  const proximity = ship.proximity ?? 3;
+  const proxColor =
+    proximity <= 1 ? "#ff3c1e" :
+    proximity === 2 ? "#ff8c00" :
+    proximity === 3 ? "#ffae00" :
+    proximity === 4 ? "#4a9eff" : "#6b7a8d";
+
   return (
     <div className={`tc-card ${isDestroyed ? "is-destroyed" : ""}`}>
 
@@ -311,6 +335,17 @@ const TacticalCard = ({ ship, allShips, onFire, onUpdate }) => {
             {ship.shipClass === "type_III" ? "CLASSE III" : "CLASSE II"}
           </span>
           <span className="tc-card-ship-name">{ship.name}</span>
+          {/* Badge de Proximidade no Card */}
+          <span
+            className="tc-card-prox-badge"
+            style={{ borderColor: proxColor, color: proxColor }}
+          >
+            P{proximity}
+          </span>
+          {/* Badge de Derrapagem */}
+          {ship.isDerrapando && (
+            <span className="tc-card-derrap-badge">DERRAP</span>
+          )}
         </div>
 
         <div className="tc-card-header-right">
@@ -412,6 +447,13 @@ const TerminalCombate = ({ onBack }) => {
     setLastRefresh(new Date());
   };
 
+  // Encontra a nave dos jogadores (primeira aliada não destruída com atributos)
+  const playerShipId = Object.keys(allShips).find(id =>
+    !allShips[id].isEnemy &&
+    allShips[id].status !== "destruida" &&
+    Object.keys(allShips[id].attributes || {}).length > 0
+  ) ?? "";
+
   useEffect(() => {
     document.body.style.cursor = "url('/normal.cur'), auto";
     refresh();
@@ -473,7 +515,6 @@ const TerminalCombate = ({ onBack }) => {
     const hasBallistic = isBallisticLockEligible(member, attackerShip);
     if (!missiles && hasBallistic) {
       if (!attackerCrewMember.ballisticTarget) {
-        // Inicia mira — primeiro clique em "MIRAR BALÍSTICO"
         attackerCrewMember.ballisticTarget    = targetId;
         attackerCrewMember.ballisticLockLevel = 0;
         localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
@@ -481,7 +522,6 @@ const TerminalCombate = ({ onBack }) => {
         refresh();
         return;
       }
-      // Se mudou de alvo, reinicia o lock
       if (attackerCrewMember.ballisticTarget !== targetId) {
         attackerCrewMember.ballisticTarget    = targetId;
         attackerCrewMember.ballisticLockLevel = 0;
@@ -490,36 +530,56 @@ const TerminalCombate = ({ onBack }) => {
         refresh();
         return;
       }
-      // Tem lock — prossegue para o cálculo de dano normalmente abaixo
     }
 
-    // ── CÁLCULO DE PRECISÃO E VANTAGEM ───────────────────────────────────────
-    const precisao   = member.precisao || 50;
-    const attrLevel  = attackerShip.attributes[missiles ? "missiles" : "weapons"];
-    const effectStr  = getEffect(attackerShip.shipClass, missiles ? "missiles" : "weapons", attrLevel);
+    // ── MODIFICADORES DE PROXIMIDADE E DERRAPAGEM ─────────────────────────────
+    const proximity  = attackerShip.proximity ?? 3;
+    const proxMods   = getProximityModifiers(proximity, attackerShip.isDerrapando);
+
+    if (proxMods.blocked) {
+      addLog({ hit: false, text: `🚫 ${attackerShip.name} - ${member.function}: Fora de alcance (P${proximity}). Ataque bloqueado.` });
+      return;
+    }
+
+    const precisao    = member.precisao || 50;
+    const attrLevel   = attackerShip.attributes[missiles ? "missiles" : "weapons"];
+    const effectStr   = getEffect(attackerShip.shipClass, missiles ? "missiles" : "weapons", attrLevel);
     const weaponLabel = missiles ? "Mísseis" : "Armas";
 
-    // Vantagem: míssil usa missileLockLevel, balístico usa ballisticLockLevel
     const missileLockLevel   = attackerCrewMember.missileLockLevel   || 0;
     const ballisticLockLevel = attackerCrewMember.ballisticLockLevel || 0;
 
-    let advantageLevel = 1;
+    // ── Acúmulo total de vantagem: lock + proximidade ─────────────────────────
+    let advantageLevel = 1 + proxMods.advantageBonus;
+
     if (missiles) {
-      if (missileLockLevel === 2)   advantageLevel = 2;
-      if (missileLockLevel >= 3)    advantageLevel = 3;
+      if (missileLockLevel === 2) advantageLevel += 1;
+      if (missileLockLevel >= 3) advantageLevel += 2;
     } else if (hasBallistic) {
-      if (ballisticLockLevel === 2) advantageLevel = 2;
-      if (ballisticLockLevel >= 3)  advantageLevel = 3;
+      if (ballisticLockLevel === 2) advantageLevel += 1;
+      if (ballisticLockLevel >= 3) advantageLevel += 2;
     }
 
-    const { acertou, isExtremo, rolou, allRolls } = rollHit(precisao, advantageLevel);
+    // ── Precisão ajustada por distância + derrapagem ──────────────────────────
+    const precisaoAjustada = Math.max(1,
+      Math.round(precisao * proxMods.precisionMultiplier) + proxMods.derrapagemPenalty
+    );
+
+    // Label de proximidade para o log
+    const proxLabel =
+      proximity <= 2 ? ` [P${proximity}/VTG+${proxMods.advantageBonus}]` :
+      proximity === 4 ? ` [P${proximity}/PREC÷2]` :
+      attackerShip.isDerrapando ? ` [P${proximity}/DERRAP−20]` :
+      ` [P${proximity}]`;
+
+    const { acertou, isExtremo, rolou, allRolls } = rollHit(precisaoAjustada, advantageLevel);
 
     if (!acertou) {
       const logRolls = advantageLevel > 1 ? `[${allRolls.join(', ')}] -> ` : '';
       const msgFalha = [
-        `${member.id} [${weaponLabel} Nv.${attrLevel}: ${effectStr}]`,
+        `${member.id} [${weaponLabel} Nv.${attrLevel}: ${effectStr}]${proxLabel}`,
         `→ ${target.name}`,
-        `| d100: ${logRolls}${rolou}/${precisao}% ✗`,
+        `| d100: ${logRolls}${rolou}/${precisaoAjustada}% ✗`,
         `| ERROU O ALVO`
       ].join("  ");
 
@@ -528,7 +588,6 @@ const TerminalCombate = ({ onBack }) => {
       }));
       addLog({ hit: false, text: msgFalha });
 
-      // Após erro: míssil reseta e entra em cooldown; balístico reseta lock
       if (missiles) {
         attackerCrewMember.missileLockLevel = 0;
         attackerCrewMember.missileTarget    = null;
@@ -566,11 +625,11 @@ const TerminalCombate = ({ onBack }) => {
     }
 
     const tags = [];
-    if (isExtremo)       tags.push("[EXTREMO!]");
-    else if (isCritico)  tags.push("[CRÍTICO!]");
+    if (isExtremo)      tags.push("[EXTREMO!]");
+    else if (isCritico) tags.push("[CRÍTICO!]");
 
-    let moduleMsg   = "";
-    let moduleTag   = "";
+    let moduleMsg    = "";
+    let moduleTag    = "";
     let isShieldHit  = false;
     let isEnginesHit = false;
 
@@ -626,15 +685,16 @@ const TerminalCombate = ({ onBack }) => {
       }
     }
 
-    const logRolls      = advantageLevel > 1 ? `[${allRolls.join(', ')}] -> ` : '';
+    const logRolls       = advantageLevel > 1 ? `[${allRolls.join(', ')}] -> ` : '';
     const advantageLabel =
-      advantageLevel === 2 ? " [VANTAGEM]" :
-      advantageLevel === 3 ? " [SUPER VANTAGEM]" : "";
+      advantageLevel === 2 ? " [VANTAGEM]"       :
+      advantageLevel === 3 ? " [DUPLA VTG]"      :
+      advantageLevel >= 4  ? " [SUPER VTG]"      : "";
 
     const msg = [
-      `${member.id} [${weaponLabel} Nv.${attrLevel}: ${effectStr}]${advantageLabel}`,
+      `${member.id} [${weaponLabel} Nv.${attrLevel}: ${effectStr}]${proxLabel}${advantageLabel}`,
       `→ ${target.name}`,
-      `| d100: ${logRolls}${rolou}/${precisao}% ✓`,
+      `| d100: ${logRolls}${rolou}/${precisaoAjustada}% ✓`,
       `| Rolou: ${breakdown} = ${rawDamage}`,
       `| Escudo: -${shieldValue}`,
       `| Dano: ${finalDamage} HP`,
@@ -656,8 +716,6 @@ const TerminalCombate = ({ onBack }) => {
     addLog({ hit: true, text: msg, isShield: isShieldHit, isEngines: isEnginesHit });
 
     // ── Limpeza pós-disparo ───────────────────────────────────────────────────
-    // ── Limpeza pós-disparo (CORRIGIDA) ──────────────────────────────────────
-    // Puxamos a cópia mais recente do banco de dados (com HP reduzido e avarias aplicadas)
     const finalShips = getAllShips();
     const finalAttackerCrew = finalShips[attackerShip.id].activeCrew.find(m => m.id === member.id);
 
@@ -668,7 +726,6 @@ const TerminalCombate = ({ onBack }) => {
       finalShips[attackerShip.id].missileCooldown = 2;
       localStorage.setItem("heavens_door_ships_db", JSON.stringify(finalShips));
     } else if (hasBallistic) {
-      // Lock balístico reseta após disparo (sem cooldown)
       finalAttackerCrew.ballisticLockLevel = 0;
       finalAttackerCrew.ballisticTarget    = null;
       localStorage.setItem("heavens_door_ships_db", JSON.stringify(finalShips));
@@ -700,11 +757,9 @@ const TerminalCombate = ({ onBack }) => {
 
     Object.values(ships).forEach(ship => {
       if (ship.status === 'ativa' || !ship.isEnemy) {
-        // Lock de míssil
         const alertasMissile = incrementMissileLock(ship.id);
         if (alertasMissile?.length) alertas.push(...alertasMissile);
 
-        // Lock balístico — apenas inimigos
         const alertasBallistic = incrementBallisticLock(ship.id);
         if (alertasBallistic?.length) alertas.push(...alertasBallistic);
       }
@@ -824,6 +879,7 @@ const TerminalCombate = ({ onBack }) => {
       </div>
 
       <div className="tc-layout">
+        {/* ── Cards de Naves Inimigas ── */}
         <div className="tc-body">
           {activeEnemies.length === 0 ? (
             <div className="tc-empty">
@@ -843,6 +899,16 @@ const TerminalCombate = ({ onBack }) => {
           )}
         </div>
 
+        {/* ── Radar Tático do Mestre ── */}
+        <div className="tc-radar-panel">
+          <RadarTatico
+            playerShipId={playerShipId}
+            playerRole="mestre"
+            onProximityChange={refresh}
+          />
+        </div>
+
+        {/* ── Log de Combate ── */}
         <CombatLog entries={combatLog} />
       </div>
 
