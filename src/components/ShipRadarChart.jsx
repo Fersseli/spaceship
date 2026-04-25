@@ -1,5 +1,5 @@
 import React from "react";
-import {
+import { memo,
   Radar,
   RadarChart,
   PolarGrid,
@@ -63,4 +63,4 @@ const ShipRadarChart = ({ attributes }) => {
   );
 };
 
-export default ShipRadarChart;
+export default memo(ShipRadarChart);

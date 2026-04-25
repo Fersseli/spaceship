@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { memo, useState, useEffect, useRef, useMemo } from "react";
 import { db } from "../utils/firebase"; // <-- IMPORTANTE
 import { doc, setDoc, onSnapshot } from "firebase/firestore"; // <-- IMPORTANTE
 import {
@@ -330,7 +330,7 @@ const ShipAttributeAdjuster = ({ ship, onUpdate }) => {
 
 // ─── Card Tático ──────────────────────────────────────────────────────────────
 
-const TacticalCard = ({ ship, allShips, proxMatrix, onFire, onUpdate }) => {
+const TacticalCard = React.memo(({ ship, allShips, proxMatrix, onFire, onUpdate }) => {
   const hpPct       = Math.round((ship.currentHP / ship.maxHP) * 100);
   const crew        = ship.activeCrew || [];
   const isDestroyed = ship.currentHP <= 0;
@@ -459,7 +459,11 @@ const TacticalCard = ({ ship, allShips, proxMatrix, onFire, onUpdate }) => {
       </div>
     </div>
   );
-};
+}, (prev, next) => {
+  // 🚀 A mágica acontece aqui: Só desenha de novo se a PRÓPRIA nave mudar ou a matriz mudar
+  return JSON.stringify(prev.ship) === JSON.stringify(next.ship) && 
+         prev.proxMatrix === next.proxMatrix;
+});
 
 // ─── Log de Combate ───────────────────────────────────────────────────────────
 
@@ -483,8 +487,13 @@ const CombatLog = ({ entries }) => (
 
 const TerminalCombate = ({ onBack }) => {
   const [allShips,      setAllShips]      = useState({});
-  const [activeEnemies, setActiveEnemies] = useState([]);
   const [combatLog,     setCombatLog]     = useState([]);
+  
+  // 🚀 ADICIONE ESTE BLOCO AQUI:
+  const activeEnemies = useMemo(() => {
+    return Object.values(allShips).filter((s) => s.isEnemy && s.status === "ativa");
+  }, [allShips]);
+  
   const [lastRefresh,   setLastRefresh]   = useState(new Date());
   
   const [proxMatrix,    setProxMatrix]    = useState({}); // <-- NOVO ESTADO
@@ -502,7 +511,6 @@ const TerminalCombate = ({ onBack }) => {
     const matrix = await getProximityMatrix();
     setAllShips(ships);
     setProxMatrix(matrix);
-    setActiveEnemies(Object.values(ships).filter((s) => s.isEnemy && s.status === "ativa"));
     setLastRefresh(new Date());
   };
   
@@ -521,7 +529,6 @@ const TerminalCombate = ({ onBack }) => {
     if (docSnap.exists()) {
       const shipsData = docSnap.data();
       setAllShips(shipsData);
-      setActiveEnemies(Object.values(shipsData).filter((s) => s.isEnemy && s.status === "ativa"));
       // Atualize a matriz apenas quando necessário
       const matrix = await getProximityMatrix();
       setProxMatrix(matrix);
