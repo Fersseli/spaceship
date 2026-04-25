@@ -460,11 +460,24 @@ setProximityMatrix(matrix);
                           className="fleet-input highlight-input"
                           style={{ color: fleetData[selectedShipId].status === "ativa" ? '#ff4a4a' : '#fff' }}
                           value={fleetData[selectedShipId].status || "desativada"}
-                          onChange={async (e) => {
+                          onChange={(e) => {
                           const novoStatus = e.target.value;
-                          await setEnemyShipStatus(selectedShipId, novoStatus); // ASYNC
-                          setFleetData(await getAllShips()); // ASYNC
-                          refreshData();
+                          
+                          // 🚀 1. Atualização Otimista: Muda a cor e o texto na hora!
+                          setFleetData(prev => ({
+                            ...prev,
+                            [selectedShipId]: {
+                              ...prev[selectedShipId],
+                              status: novoStatus
+                            }
+                          }));
+                          
+                          // 🚀 2. Envia para o Firebase em background (sem await travando)
+                          setEnemyShipStatus(selectedShipId, novoStatus)
+                            .then(() => {
+                              refreshData();
+                            })
+                            .catch(err => console.error("Erro ao mudar status:", err));
                           
                           if (novoStatus === "ativa") {
                             localStorage.setItem("enemy_activated_event", Date.now().toString());

@@ -64,6 +64,7 @@ const [shipDataState, setShipDataState] = useState(null);
   const sonarSound       = useRef(new Audio('/sonar.mp3')); // <--- ADICIONE ESTA LINHA
   const mountTime = useRef(Date.now()); 
   const prevEnemiesRef = useRef([]);
+  const isFirstLoad = useRef(true);
 
   const playFailSound = () => {
     if (failSound.current) {
@@ -318,13 +319,18 @@ const [shipDataState, setShipDataState] = useState(null);
         const currentEnemies = shipsArray.filter(s => s.isEnemy && s.status === "ativa").map(s => s.id);
         const newActivations = currentEnemies.filter(id => !prevEnemiesRef.current.includes(id));
         
-        if (newActivations.length > 0 && prevEnemiesRef.current.length > 0) {
+        // 🚀 O som toca se houver ativação E não for o exato milissegundo em que a tela abriu
+        if (newActivations.length > 0 && !isFirstLoad.current) {
           if (sonarSound.current) {
-            sonarSound.current.currentTime = 0;
-            sonarSound.current.volume = 1.0;
-            sonarSound.current.play().catch(() => {});
+            setTimeout(() => {
+              sonarSound.current.currentTime = 0;
+              sonarSound.current.volume = 1.0;
+              sonarSound.current.play().catch(() => {});
+            }, 0);
           }
         }
+        
+        isFirstLoad.current = false; // Após o primeiro carregamento, a tela já está pronta
         prevEnemiesRef.current = currentEnemies;
       }
     });
