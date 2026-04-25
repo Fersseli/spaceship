@@ -6,15 +6,15 @@ import {
   failManeuver,
   rollEnemySpeed,
   resolveEngagement,
-  changeProximity,
   getProximityModifiers,
+  getProximity,
+  changeProximity,
 } from "../utils/mockApi";
 import "../styles/RadarTatico.css";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const proximityLabel = (p) => ["", "CONTATO", "PERTO", "MÉDIO", "LONGE", "LIMITE"][p] ?? "—";
 
-// Gera posição angular para cada blip no anel correto
 const blipPosition = (index, total, ringRadius) => {
   const angle = ((2 * Math.PI) / total) * index - Math.PI / 2;
   return {
@@ -30,22 +30,20 @@ const RadarTatico = ({
   playerShipId,
   playerRole,
   onProximityChange,
-  theme = "default", // <--- Propriedade de tema adicionada
-  onFail // <--- Propriedade de som adicionada
+  theme = "default",
+  onFail,
 }) => {
-  const isMestre = playerRole === "mestre";
-  const isPiloto = playerRole === "piloto";
+  const isMestre   = playerRole === "mestre";
+  const isPiloto   = playerRole === "piloto";
   const isStarfield = theme === "starfield";
 
-  // Lógica de cores baseada no tema
   const getProximityColor = (p) => {
     if (isStarfield) {
-      if (p <= 2) return "#a2312d"; // Vermelho opaco
-      if (p === 3) return "#d89329"; // Laranja/Dourado
-      if (p === 4) return "#2a9aae"; // Azul Teal
-      return "#809aab"; // Cinza azulado
+      if (p <= 2) return "#a2312d";
+      if (p === 3) return "#d89329";
+      if (p === 4) return "#2a9aae";
+      return "#809aab";
     }
-    // Tema Original Padrão
     if (p <= 1) return "#ff3c1e";
     if (p === 2) return "#ff8c00";
     if (p === 3) return "#ffae00";
@@ -54,21 +52,25 @@ const RadarTatico = ({
   };
 
   const radarThemeColors = {
-    bgPulse: isStarfield ? "rgba(42, 154, 174, 0.08)" : "rgba(255,80,40,0.06)",
-    sweep: isStarfield ? "rgba(42, 154, 174, 0.4)" : "rgba(255,80,40,0.35)",
-    player: isStarfield ? "#64a9b8" : "#4a9eff",
-    ringStroke: isStarfield ? "rgba(208,208,208,0.15)" : "rgba(255,255,255,0.06)",
-    ringMidStroke: isStarfield ? "rgba(208,208,208,0.4)" : "rgba(255,255,255,0.12)",
+    bgPulse:     isStarfield ? "rgba(42, 154, 174, 0.08)" : "rgba(255,80,40,0.06)",
+    sweep:       isStarfield ? "rgba(42, 154, 174, 0.4)"  : "rgba(255,80,40,0.35)",
+    player:      isStarfield ? "#64a9b8" : "#4a9eff",
+    ringStroke:  isStarfield ? "rgba(208,208,208,0.15)"   : "rgba(255,255,255,0.06)",
+    ringMidStroke: isStarfield ? "rgba(208,208,208,0.4)"  : "rgba(255,255,255,0.12)",
   };
 
-  const [allShips, setAllShips] = useState({});
-  const [playerShip, setPlayerShip] = useState(null);
-  const [enemies, setEnemies] = useState([]);
-  const [accelInput, setAccelInput] = useState("");
+  const [allShips,    setAllShips]    = useState({});
+  const [playerShip,  setPlayerShip]  = useState(null);
+  const [enemies,     setEnemies]     = useState([]);
+  const [accelInput,  setAccelInput]  = useState("");
   const [engagementResult, setEngagementResult] = useState(null);
-  const [pendingChoice, setPendingChoice] = useState(null);
-  const [flashBlip, setFlashBlip] = useState(null);
-  const [statusMsg, setStatusMsg] = useState("");
+  const [pendingChoice,    setPendingChoice]    = useState(null);
+  const [flashBlip,   setFlashBlip]   = useState(null);
+  const [statusMsg,   setStatusMsg]   = useState("");
+
+  // Para o mestre no terminal: qual aliado está sendo editado no engajamento
+  const [engagingAliadoId, setEngagingAliadoId] = useState(null);
+
   const accelerateSound = useRef(new Audio('/acelerar.wav'));
 
   const refresh = () => {
@@ -86,7 +88,7 @@ const RadarTatico = ({
     refresh();
     const interval = setInterval(refresh, 3000);
     const handleStorage = (e) => {
-      if (e.key === "heavens_door_ships_db") refresh();
+      if (e.key === "heavens_door_ships_db" || e.key === "heavens_door_proximity_matrix") refresh();
     };
     window.addEventListener("storage", handleStorage);
     return () => {
@@ -99,13 +101,11 @@ const RadarTatico = ({
     const val = parseInt(accelInput);
     if (isNaN(val) || val < 0) return;
     const result = accelerateShip(playerShipId, val);
-  
-  // ---> ADICIONE ESTE BLOCO PARA TOCAR O SOM <---
-  if (accelerateSound.current) {
-    accelerateSound.current.currentTime = 0;
-    accelerateSound.current.volume = 1.0;
-    accelerateSound.current.play().catch(e => console.warn("Áudio bloqueado pelo navegador:", e));
-  }
+    if (accelerateSound.current) {
+      accelerateSound.current.currentTime = 0;
+      accelerateSound.current.volume = 1.0;
+      accelerateSound.current.play().catch(e => console.warn("Áudio bloqueado:", e));
+    }
     setAccelInput("");
     setStatusMsg(`⚡ Velocidade: ${result.newSpeed} / VM${result.maxSpeed}`);
     refresh();
@@ -114,33 +114,28 @@ const RadarTatico = ({
 
   const handleFailManeuver = () => {
     const newSpeed = failManeuver(playerShipId);
-    
-    // Avisa o ShipDashboard para tocar o som (se a função foi passada)
-    if (onFail) {
-      onFail();
-    }
-
+    if (onFail) onFail();
     setStatusMsg(`💥 DERRAPAGEM! Velocidade caiu para ${newSpeed}. -20% precisão neste turno.`);
     refresh();
     setTimeout(() => setStatusMsg(""), 4000);
   };
 
-  // ── Rolar Velocidade Inimiga (Mestre) ───────────────────────────────────────
   const handleRollEnemySpeed = (shipId) => {
     const result = rollEnemySpeed(shipId);
     setFlashBlip(shipId);
-    
     if (result.success) {
       setStatusMsg(`✅ ${allShips[shipId]?.name}: Pilotagem [${result.d100}/${result.precisao}%]. Rolou +${result.rolled} → VM ${result.newSpeed}/${result.maxSpeed}`);
     } else {
       setStatusMsg(`💥 ${allShips[shipId]?.name}: FALHOU na Pilotagem [${result.d100}/${result.precisao}%]! Nave derrapou (VM ${result.newSpeed}).`);
     }
-    
     refresh();
     setTimeout(() => setFlashBlip(null), 800);
-    setTimeout(() => setStatusMsg(""), 5000); // Aumentei o tempo da msg para 5s para dar tempo de ler o resultado do d100
+    setTimeout(() => setStatusMsg(""), 5000);
   };
 
+  // ── Engajamento por nave aliada ────────────────────────────────────────────
+  // No modo mestre do Terminal, recebe playerShipId como ID de qualquer aliada
+  // No modo piloto do ShipDashboard, usa a própria nave
   const handleResolveEngagement = () => {
     const results = resolveEngagement(playerShipId);
     if (results.length === 0) {
@@ -148,13 +143,23 @@ const RadarTatico = ({
       setTimeout(() => setStatusMsg(""), 3000);
       return;
     }
+    setEngagingAliadoId(playerShipId);
     setEngagementResult(results);
-    if (results.length > 0) setPendingChoice(results[0]);
+    setPendingChoice(results[0]);
   };
 
   const handleProximityChoice = (delta) => {
     if (!pendingChoice) return;
-    const newProx = changeProximity(pendingChoice.enemyId, delta);
+    // Usa a matriz relacional: aliado × inimigo
+    const aliadoId = pendingChoice.aliadoId || playerShipId;
+    const newProx = changeProximity(aliadoId, pendingChoice.enemyId, delta);
+
+    // Dispara evento de storage para que outros componentes atualizem
+    window.dispatchEvent(new StorageEvent('storage', {
+      key: 'heavens_door_proximity_matrix',
+      newValue: localStorage.getItem('heavens_door_proximity_matrix'),
+    }));
+
     setFlashBlip(pendingChoice.enemyId);
     setTimeout(() => setFlashBlip(null), 600);
 
@@ -165,6 +170,7 @@ const RadarTatico = ({
     } else {
       setPendingChoice(null);
       setEngagementResult(null);
+      setEngagingAliadoId(null);
       setStatusMsg("✅ Engajamento resolvido!");
       setTimeout(() => setStatusMsg(""), 3000);
     }
@@ -174,11 +180,14 @@ const RadarTatico = ({
 
   const renderRadar = () => {
     const rings = [1, 2, 3, 4, 5];
+
+    // Para o radar individual, agrupa inimigos pela proximidade
+    // relativa à nave deste jogador (playerShipId)
     const byProximity = {};
     enemies.forEach((e) => {
-      const p = e.proximity ?? 3;
+      const p = getProximity(playerShipId, e.id);
       if (!byProximity[p]) byProximity[p] = [];
-      byProximity[p].push(e);
+      byProximity[p].push({ ...e, _displayProx: p });
     });
 
     return (
@@ -244,7 +253,7 @@ const RadarTatico = ({
           return group.map((enemy, idx) => {
             const pos = blipPosition(idx, Math.max(group.length, 1), RING_RADII[ring]);
             const isFlashing = flashBlip === enemy.id;
-            const color = getProximityColor(enemy.proximity ?? 3);
+            const color = getProximityColor(enemy._displayProx);
             return (
               <g key={enemy.id} filter="url(#blipGlow)">
                 <circle
@@ -272,9 +281,9 @@ const RadarTatico = ({
   };
 
   const maxSpeedDisplay = playerShip ? getMaxSpeed(playerShip) : 0;
-  const currentSpeed = playerShip?.currentSpeed ?? 0;
-  const isDerrapando = playerShip?.isDerrapando ?? false;
-  const speedPct = maxSpeedDisplay > 0 ? (currentSpeed / maxSpeedDisplay) * 100 : 0;
+  const currentSpeed    = playerShip?.currentSpeed ?? 0;
+  const isDerrapando    = playerShip?.isDerrapando ?? false;
+  const speedPct        = maxSpeedDisplay > 0 ? (currentSpeed / maxSpeedDisplay) * 100 : 0;
 
   return (
     <div className={`rt-root ${isStarfield ? 'theme-starfield' : ''}`}>
@@ -301,10 +310,12 @@ const RadarTatico = ({
         </div>
       </div>
 
+      {/* Lista de inimigos com proximidade relativa a ESTA nave */}
       <div className="rt-enemy-list">
         {enemies.length === 0 && <div className="rt-no-enemies">Sem contatos ativos</div>}
         {enemies.map((enemy) => {
-          const prox = enemy.proximity ?? 3;
+          // Proximidade relativa ao jogador atual
+          const prox = getProximity(playerShipId, enemy.id);
           const mods = getProximityModifiers(prox, enemy.isDerrapando);
           const color = getProximityColor(prox);
           return (
@@ -335,13 +346,18 @@ const RadarTatico = ({
       </div>
 
       {statusMsg && <div className="rt-status-msg">{statusMsg}</div>}
-      {/* ── Popup de Engajamento (Mestre) ── */}
 
+      {/* Popup de Engajamento — agora mostra qual aliado está engajando */}
       {pendingChoice && (
         <div className="rt-engagement-popup">
           <div className="rt-eng-header">
             <div className="rt-eng-dot" />
             <span>RESOLUÇÃO DE ENGAJAMENTO</span>
+            {engagingAliadoId && (
+              <span style={{ marginLeft: 'auto', color: 'rgba(74,158,255,0.7)', fontSize: '0.5rem' }}>
+                [{allShips[engagingAliadoId]?.name || engagingAliadoId}]
+              </span>
+            )}
           </div>
           <div className="rt-eng-body">
             <div className="rt-eng-name">{pendingChoice.enemyName}</div>
@@ -379,7 +395,14 @@ const RadarTatico = ({
         <div className="rt-pilot-controls">
           <div className="rt-ctrl-label">ACELERAÇÃO — insira o dado rolado</div>
           <div className="rt-accel-row">
-            <input type="number" className="rt-accel-input" value={accelInput} onChange={(e) => setAccelInput(e.target.value)} placeholder="dado" min={0} />
+            <input
+              type="number"
+              className="rt-accel-input"
+              value={accelInput}
+              onChange={(e) => setAccelInput(e.target.value)}
+              placeholder="dado"
+              min={0}
+            />
             <button className="rt-accel-btn" onClick={handleAccelerate}>ACELERAR</button>
           </div>
           <button className="rt-fail-btn" onClick={handleFailManeuver}>⚠ FALHA EM MANOBRA</button>
@@ -388,7 +411,11 @@ const RadarTatico = ({
 
       {isMestre && (
         <div className="rt-master-controls">
-          <button className="rt-resolve-btn" onClick={handleResolveEngagement} disabled={!!pendingChoice}>
+          <button
+            className="rt-resolve-btn"
+            onClick={handleResolveEngagement}
+            disabled={!!pendingChoice}
+          >
             ENGAJAMENTO
           </button>
         </div>

@@ -10,8 +10,8 @@ const AdminLogin = ({ onAdminSuccess, onBack }) => {
     e.preventDefault();
 
     // Validação das credenciais de Administrador
-    if (user === "ZERO" && pass === "fernando") {
-      setMessage("LOGIN BEM SUCEDIDO. A REDIRECIONAR...");
+    if (user === "ZERO" && pass === "fernando" || user === "zero" && pass === "fernando") {
+      setMessage("LOGIN BEM SUCEDIDO. REDIRECIONANDO...");
       
       // Aciona a função de sucesso que vem do LoginScreen após 1 segundo
       setTimeout(() => {
@@ -42,7 +42,7 @@ const AdminLogin = ({ onAdminSuccess, onBack }) => {
               value={user}
               onChange={(e) => setUser(e.target.value)}
               className="form-input"
-              placeholder="IDENTIFIER"
+              placeholder="IDENTIFICACAO"
             />
           </div>
 
@@ -60,7 +60,7 @@ const AdminLogin = ({ onAdminSuccess, onBack }) => {
           {message && <div className="admin-message">{message}</div>}
 
           <button type="submit" className="login-button">
-            ENTER
+            START
           </button>
           
           <button type="button" onClick={onBack} className="admin-back-btn">

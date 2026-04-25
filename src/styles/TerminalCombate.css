@@ -965,3 +965,85 @@
     border-top: 1px solid rgba(255, 60, 30, 0.2);
   }
 }
+
+/* ─── SELETOR DE PERSPECTIVA (AJUSTE VERTICAL) ─────────────────────────────── */
+
+.tc-radar-ally-selector {
+  display: flex;
+  flex-direction: column; /* Empilha a palavra Perspectiva e o Botão */
+  align-items: flex-start; /* Alinha à esquerda */
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 8px;
+  background: rgba(42, 154, 174, 0.05);
+  border: 1px solid rgba(42, 154, 174, 0.3);
+  position: relative;
+  width: 100%; /* Garante que ocupe a largura da coluna do radar */
+  box-sizing: border-box;
+}
+
+/* Detalhe angular HUD */
+.tc-radar-ally-selector::after {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  width: 8px;
+  height: 8px;
+  border-top: 2px solid #2a9aae;
+  border-left: 2px solid #2a9aae;
+}
+
+.tc-radar-ally-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem; /* Diminuído levemente para economizar espaço */
+  color: rgba(208, 208, 208, 0.7);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Ponto piscante */
+.tc-radar-ally-label::before {
+  content: '';
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  background-color: #d89329;
+  box-shadow: 0 0 4px #d89329;
+  animation: tc-radar-blink 2s infinite;
+}
+
+.tc-radar-ally-select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: rgba(0, 0, 0, 0.5);
+  color: #2a9aae;
+  border: 1px solid rgba(42, 154, 174, 0.4);
+  padding: 5px 10px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  font-weight: bold;
+  text-transform: uppercase;
+  width: 100%; /* Botão agora ocupa a largura total da caixa */
+  cursor: pointer;
+  outline: none;
+  
+  /* Seta customizada */
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232a9aae' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 12px;
+}
+
+.tc-radar-ally-select:hover {
+  border-color: #2a9aae;
+  background-color: rgba(42, 154, 174, 0.1);
+}
+
+@keyframes tc-radar-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}

@@ -1,21 +1,127 @@
-// src/utils/mockApi.js — VERSÃO COMPLETA COM SISTEMA DE DOGFIGHT
+// src/utils/mockApi.js — VERSÃO COM MATRIZ DE PROXIMIDADE RELACIONAL
 import { shipsDatabase } from '../data/ships';
 import { rollDamage, parseShield } from "./diceHelpers";
 import { getEffect } from "./effectHelpers";
 
 const DB_KEY         = "heavens_door_ships_db";
-const DB_VERSION     = 12; // bumped: dogfight system added
+const DB_VERSION     = 13; // bumped: proximity matrix system
 const DB_VERSION_KEY = "heavens_door_ships_db_version";
 
 // ═══════════════════════════════════════════════════════════════════
-// SISTEMA DE DOGFIGHT — Navegação e Proximidade
+// MATRIZ DE PROXIMIDADE RELACIONAL
+// Estrutura: { "aliadoId__inimigoId": 3, ... }
+// Chave composta: `${aliadoId}__${enemyId}`
+// ═══════════════════════════════════════════════════════════════════
+
+const PROX_KEY = "heavens_door_proximity_matrix";
+
+export const getProximityMatrix = () => {
+  try {
+    return JSON.parse(localStorage.getItem(PROX_KEY) || "{}");
+  } catch {
+    return {};
+  }
+};
+
+const saveProximityMatrix = (matrix) => {
+  localStorage.setItem(PROX_KEY, JSON.stringify(matrix));
+};
+
+const proxKey = (aliadoId, inimigoId) => `${aliadoId}__${inimigoId}`;
+
+/**
+ * Retorna a proximidade entre uma nave aliada e uma nave inimiga.
+ * Default: 3 (Médio).
+ */
+export const getProximity = (aliadoId, inimigoId) => {
+  const matrix = getProximityMatrix();
+  const val = matrix[proxKey(aliadoId, inimigoId)];
+  return val !== undefined ? val : 3;
+};
+
+/**
+ * Define a proximidade entre uma nave aliada e uma nave inimiga.
+ * Garante que fique entre 1 e 5.
+ */
+export const setProximity = (aliadoId, inimigoId, value) => {
+  const matrix = getProximityMatrix();
+  matrix[proxKey(aliadoId, inimigoId)] = Math.max(1, Math.min(5, value));
+  saveProximityMatrix(matrix);
+  return matrix[proxKey(aliadoId, inimigoId)];
+};
+
+/**
+ * Muda a proximidade de forma relativa (delta).
+ */
+export const changeProximity = (aliadoId, inimigoId, delta) => {
+  const current = getProximity(aliadoId, inimigoId);
+  return setProximity(aliadoId, inimigoId, current + delta);
+};
+
+/**
+ * Remove todas as entradas de proximidade envolvendo uma nave específica
+ * (útil quando uma nave é destruída ou desativada).
+ */
+export const removeProximityEntries = (shipId) => {
+  const matrix = getProximityMatrix();
+  const newMatrix = {};
+  Object.entries(matrix).forEach(([key, val]) => {
+    const [a, b] = key.split("__");
+    if (a !== shipId && b !== shipId) {
+      newMatrix[key] = val;
+    }
+  });
+  saveProximityMatrix(newMatrix);
+};
+
+/**
+ * Inicializa entradas de proximidade para um inimigo recém-ativado
+ * contra todas as naves aliadas ativas (default P3).
+ */
+export const initEnemyProximity = (enemyId) => {
+  const ships = getAllShips();
+  const matrix = getProximityMatrix();
+  Object.values(ships).forEach(ship => {
+    if (!ship.isEnemy) {
+      const key = proxKey(ship.id, enemyId);
+      if (matrix[key] === undefined) {
+        matrix[key] = 3;
+      }
+    }
+  });
+  saveProximityMatrix(matrix);
+};
+
+/**
+ * Retorna todos os inimigos e suas proximidades relativas a uma nave aliada.
+ * Formato: [{ enemyId, enemyName, proximity }]
+ */
+export const getEnemyProximitiesForShip = (aliadoId) => {
+  const ships = getAllShips();
+  const result = [];
+  Object.values(ships).forEach(ship => {
+    if (ship.isEnemy && ship.status === "ativa") {
+      result.push({
+        enemyId: ship.id,
+        enemyName: ship.name,
+        proximity: getProximity(aliadoId, ship.id),
+      });
+    }
+  });
+  return result;
+};
+
+// ═══════════════════════════════════════════════════════════════════
+// SISTEMA DE DOGFIGHT — Navegação
 // ═══════════════════════════════════════════════════════════════════
 
 export const ensureNavigationFields = (ship) => {
   if (!ship) return;
   if (ship.currentSpeed === undefined) ship.currentSpeed = 0;
   if (ship.isDerrapando === undefined) ship.isDerrapando = false;
-  if (ship.isEnemy && ship.proximity === undefined) ship.proximity = 3;
+  // proximity agora é gerenciado pela matriz, mas mantemos o campo
+  // no objeto inimigo para compatibilidade com código legado no Terminal
+  // (será sincronizado via getProximity)
 };
 
 export const getMaxSpeed = (ship) => {
@@ -55,33 +161,26 @@ export const rollEnemySpeed = (shipId) => {
   const ship = ships[shipId];
   if (!ship || !ship.isEnemy) return { newSpeed: 0, maxSpeed: 0, rolled: 0, success: false };
   ensureNavigationFields(ship);
-  
+
   const maxSpeed = getMaxSpeed(ship);
   if (maxSpeed === 0) return { newSpeed: 0, maxSpeed: 0, rolled: 0, success: false };
 
-  // 1. Encontra o piloto da nave inimiga para pegar a precisão
   const pilot = ship.activeCrew?.find(m => m.role === "piloto" || m.function === "PILOTO");
-  const precisao = pilot?.precisao || 50; // default 50% caso não encontre
-  
-  // 2. Rola o teste de pilotagem (d100)
+  const precisao = pilot?.precisao || 50;
+
   const d100 = Math.floor(Math.random() * 100) + 1;
   const success = d100 <= precisao;
 
   if (success) {
-    // 3A. PASSOU: Acelera normalmente
     const diceMax = Math.max(1, Math.floor(maxSpeed / 2));
     const rolled  = Math.floor(Math.random() * diceMax) + 1;
     const newSpeed = Math.min(ship.currentSpeed + rolled, maxSpeed);
-    
     ship.currentSpeed = newSpeed;
     ship.isDerrapando = false;
     localStorage.setItem(DB_KEY, JSON.stringify(ships));
     return { newSpeed, maxSpeed, rolled, success, d100, precisao };
-    
   } else {
-    // 3B. FALHOU: Nave derrapa e cai a velocidade pela metade
     const newSpeed = Math.floor(ship.currentSpeed / 2);
-    
     ship.currentSpeed = newSpeed;
     ship.isDerrapando = true;
     localStorage.setItem(DB_KEY, JSON.stringify(ships));
@@ -89,6 +188,10 @@ export const rollEnemySpeed = (shipId) => {
   }
 };
 
+/**
+ * Resolve engajamento entre UMA nave aliada e todos os inimigos ativos.
+ * Retorna resultados individuais com proximidades relativas àquela nave aliada.
+ */
 export const resolveEngagement = (playerShipId) => {
   const ships = getAllShips();
   const playerShip = ships[playerShipId];
@@ -102,22 +205,13 @@ export const resolveEngagement = (playerShipId) => {
     results.push({
       enemyId:     ship.id,
       enemyName:   ship.name,
+      aliadoId:    playerShipId,  // <-- qual aliado está engajando
       playerSpeed,
       enemySpeed:  ship.currentSpeed,
       winner:      playerSpeed >= ship.currentSpeed ? "player" : "enemy",
     });
   });
   return results;
-};
-
-export const changeProximity = (enemyShipId, delta) => {
-  const ships = getAllShips();
-  const ship = ships[enemyShipId];
-  if (!ship || !ship.isEnemy) return null;
-  ensureNavigationFields(ship);
-  ship.proximity = Math.max(1, Math.min(5, (ship.proximity ?? 3) + delta));
-  localStorage.setItem(DB_KEY, JSON.stringify(ships));
-  return ship.proximity;
 };
 
 export const getProximityModifiers = (proximity, isDerrapando = false) => {
@@ -165,7 +259,6 @@ export const initDB = () => {
     localStorage.setItem(DB_KEY, JSON.stringify(shipsDatabase));
     localStorage.setItem(DB_VERSION_KEY, String(DB_VERSION));
   }
-  // Garante campos de navegação em todas as naves existentes
   const allShipsForInit = JSON.parse(localStorage.getItem(DB_KEY) || "{}");
   let navChanged = false;
   Object.values(allShipsForInit).forEach(ship => {
@@ -265,7 +358,10 @@ export const clearDestroyedEnemies = () => {
   const ships = getAllShips();
   let changed = false;
   Object.values(ships).forEach(s => {
-    if (s.isEnemy && s.status === "destruida") { s.status = "desativada"; s.activeCrew = []; changed = true; }
+    if (s.isEnemy && s.status === "destruida") {
+      removeProximityEntries(s.id);
+      s.status = "desativada"; s.activeCrew = []; changed = true;
+    }
   });
   if (changed) localStorage.setItem(DB_KEY, JSON.stringify(ships));
 };
@@ -274,7 +370,10 @@ export const deactivateAllEnemies = () => {
   const ships = getAllShips();
   let changed = false;
   Object.values(ships).forEach(s => {
-    if (s.isEnemy && s.status !== "desativada") { s.status = "desativada"; s.activeCrew = []; changed = true; }
+    if (s.isEnemy && s.status !== "desativada") {
+      removeProximityEntries(s.id);
+      s.status = "desativada"; s.activeCrew = []; changed = true;
+    }
   });
   if (changed) localStorage.setItem(DB_KEY, JSON.stringify(ships));
 };
@@ -307,10 +406,10 @@ export const setEnemyShipStatus = (shipId, newStatus) => {
     const rndEsq = () => Math.floor(Math.random() * (75 - 35 + 1)) + 35;
 
     if (ship.shipClass === "type_II") {
-newCrew.push({ id: chosen[0].toUpperCase(), role: "piloto",    function: "PILOTO",   des: rndDes(), esq: rndEsq(), precisao: rndPrecisaoPiloto(), moduleStatus: 'operacional', turnosParaReparo: 0 });
+      newCrew.push({ id: chosen[0].toUpperCase(), role: "piloto",    function: "PILOTO",   des: rndDes(), esq: rndEsq(), precisao: rndPrecisaoPiloto(), moduleStatus: 'operacional', turnosParaReparo: 0 });
       if (chosen[1]) newCrew.push({ id: chosen[1].toUpperCase(), role: "copiloto", function: "COPILOTO", des: rndDes(), esq: rndEsq(), precisao: rndPrecisao(), moduleStatus: 'operacional', turnosParaReparo: 0 });
     } else {
-      newCrew.push({ id: chosen[0].toUpperCase(), role: "piloto",    function: "PILOTO",           des: rndDes(), esq: rndEsq(), precisao: rndPrecisaoPiloto(), moduleStatus: 'operacional', turnosParaReparo: 0 });      
+      newCrew.push({ id: chosen[0].toUpperCase(), role: "piloto",    function: "PILOTO",           des: rndDes(), esq: rndEsq(), precisao: rndPrecisaoPiloto(), moduleStatus: 'operacional', turnosParaReparo: 0 });
       if (chosen[1]) newCrew.push({ id: chosen[1].toUpperCase(), role: "copiloto",   function: "COPILOTO",         des: rndDes(), esq: rndEsq(), precisao: rndPrecisao(), moduleStatus: 'operacional', turnosParaReparo: 0 });
       if (chosen[2]) newCrew.push({ id: chosen[2].toUpperCase(), role: "tripulante", function: "TORRETA ESQUERDA", des: rndDes(), esq: rndEsq(), precisao: rndPrecisao(), moduleStatus: 'operacional', turnosParaReparo: 0 });
       if (chosen[3]) newCrew.push({ id: chosen[3].toUpperCase(), role: "tripulante", function: "TORRETA CENTRO",   des: rndDes(), esq: rndEsq(), precisao: rndPrecisao(), moduleStatus: 'operacional', turnosParaReparo: 0 });
@@ -319,13 +418,24 @@ newCrew.push({ id: chosen[0].toUpperCase(), role: "piloto",    function: "PILOTO
     ship.activeCrew = newCrew;
     ship.shieldStatus  = 'operacional'; ship.shieldTurnosParaReparo  = 0;
     ship.enginesStatus = 'operacional'; ship.enginesTurnosParaReparo = 0;
-    // ── Dogfight: reset de navegação ao ativar ──
     ship.currentSpeed = 0;
     ship.isDerrapando = false;
-    ship.proximity    = 3;
+    // Inicializa proximidade na matriz para todos os aliados
+    ship.status = newStatus;
+    localStorage.setItem(DB_KEY, JSON.stringify(ships));
+    initEnemyProximity(shipId);
+    return;
   }
 
-  if (newStatus === "desativada") ship.activeCrew = [];
+  if (newStatus === "desativada") {
+    ship.activeCrew = [];
+    removeProximityEntries(shipId);
+  }
+  if (newStatus === "destruida") {
+    // mantém crew congelada, mas remove da matriz
+    removeProximityEntries(shipId);
+  }
+
   ship.status = newStatus;
   localStorage.setItem(DB_KEY, JSON.stringify(ships));
 };
@@ -426,7 +536,6 @@ export const processGlobalTurn = () => {
       ship.enginesTurnosParaReparo -= 1;
       if (ship.enginesTurnosParaReparo === 0) { ship.enginesStatus = 'operacional'; relatorio.push(`${ship.name}: Motores restaurados!`); }
     }
-    // ── Dogfight: limpa derrapagem no fim do turno ──
     if (ship.isDerrapando) { ship.isDerrapando = false; }
     enforceAttributeLimits(ship);
   });
@@ -487,6 +596,7 @@ export const processPlayerAttack = (attackerShipId, targetShipId, inputDamage, i
       const currentShips = JSON.parse(localStorage.getItem("heavens_door_ships_db") || "{}");
       if (currentShips[targetShipId] && currentShips[targetShipId].currentHP <= 0) {
         currentShips[targetShipId].status = "destruida"; currentShips[targetShipId].activeCrew = [];
+        removeProximityEntries(targetShipId);
         const dbString = JSON.stringify(currentShips);
         localStorage.setItem("heavens_door_ships_db", dbString);
         window.dispatchEvent(new StorageEvent('storage', { key: 'heavens_door_ships_db', newValue: dbString }));
@@ -501,8 +611,9 @@ export const processPlayerAttack = (attackerShipId, targetShipId, inputDamage, i
   else if (isCritico) tags.push("[✨ CRÍTICO!]");
   if (moduleLog) tags.push(moduleLog);
 
-  // Incluir info de proximidade no log se houver
-  const proxInfo = target.proximity ? ` [P${target.proximity}]` : "";
+  // Proximidade do atacante em relação ao alvo
+  const proxVal = getProximity(attackerShipId, targetShipId);
+  const proxInfo = target.isEnemy ? ` [P${proxVal}]` : "";
 
   const logText = [
     `${attacker.name} [ARMA FÍSICA: ${weaponEffect}]${proxInfo}`,

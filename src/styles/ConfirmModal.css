@@ -229,3 +229,25 @@
   color: #000;
   box-shadow: 0 0 20px rgba(74, 158, 255, 0.5);
 }
+
+/* Variante Branca (God Mode / Alteração) */
+.confirm-modal.white {
+  border-top: 3px solid #ffffff;
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.15);
+}
+
+.confirm-modal.white .confirm-title {
+  color: #ffffff;
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.4);
+}
+
+.confirm-modal.white .confirm-btn-primary {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  border-color: #ffffff;
+}
+
+.confirm-modal.white .confirm-btn-primary:hover {
+  background: rgba(255, 255, 255, 0.3);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+}

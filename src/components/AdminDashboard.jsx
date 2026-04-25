@@ -5,6 +5,7 @@ import "../styles/AdminDashboard.css";
 import { getAllShips, updateShipConfig, setEnemyShipStatus, clearDestroyedEnemies, deactivateAllEnemies, repairAllShipsGlobal, enforceAttributeLimits, repairShieldByAdmin, repairEnginesByAdmin } from "../utils/mockApi";
 import TerminalCombate from "./TerminalCombate";
 import ConfirmModal from "./ConfirmModal";
+import ProximityMatrixPanel from './ProximityMatrixPanel';
 
 const applySorting = (data, config) => {
   const { key, direction } = config;
@@ -119,17 +120,28 @@ const AdminDashboard = ({ onLogout }) => {
 
   const handleSaveAlterations = () => {
     if (!alterDraft) return;
-    const ships = getAllShips();
-    const updatedShip = { ...alterDraft };
     
-    enforceAttributeLimits(updatedShip);
-    
-    ships[updatedShip.id] = updatedShip;
-    localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
-    window.dispatchEvent(new Event("storage"));
-    setFleetData(ships);
-    alert(`Alterações forçadas em [${updatedShip.name}] aplicadas ao banco de dados!`);
-    refreshData();
+    // Dispara o ConfirmModal em vez do alert()
+    showConfirm({
+      title: "SOBRESCREVER DADOS",
+      message: `Deseja forçar a aplicação das alterações na nave [${alterDraft.name}]?`,
+      subtext: "ESTA AÇÃO SOBRESCREVE A REDE E IGNORA LIMITADORES",
+      variant: "white", // Variante de cor branca
+      confirmLabel: "APLICAR NA REDE",
+      onConfirm: () => {
+        // A lógica de salvar só acontece se ele clicar em confirmar
+        const ships = getAllShips();
+        const updatedShip = { ...alterDraft };
+        
+        enforceAttributeLimits(updatedShip);
+        
+        ships[updatedShip.id] = updatedShip;
+        localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
+        window.dispatchEvent(new Event("storage"));
+        setFleetData(ships);
+        refreshData();
+      }
+    });
   };
 
   const handleClearLocks = (memberId) => {
@@ -593,7 +605,17 @@ const AdminDashboard = ({ onLogout }) => {
                         />
                       </div>
                     </div>
-
+                      
+                      {/* --- COMPONENTE DA MATRIZ DE PROXIMIDADE ADICIONADO AQUI --- */}
+              <div style={{ marginBottom: '2rem' }}>
+                <ProximityMatrixPanel 
+                  allShips={fleetData} 
+                  onUpdate={() => {
+                    setFleetData(getAllShips());
+                    refreshData();
+                  }} 
+                />
+              </div>
                   </div>
 
                   {/* COLUNA DIREITA: TRIPULAÇÃO & ARMAS */}

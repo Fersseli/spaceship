@@ -13,6 +13,9 @@ import {
   getShipMaxAttributes,
   enforceAttributeLimits,
   getProximityModifiers,
+  getProximity,
+  changeProximity,
+  resolveEngagement,
   ensureNavigationFields,
 } from "../utils/mockApi";
 import { getEffect } from "../utils/effectHelpers";
@@ -59,8 +62,8 @@ const CrewSlot = ({ member, attackerShip, allShips, onFire }) => {
     else if (member.ballisticTarget) setTargetId(member.ballisticTarget);
   }, [member.missileTarget, member.ballisticTarget]);
 
-  const fires       = canFire(member, attackerShip.shipClass);
-  const missiles    = usesMissiles(member, attackerShip.shipClass);
+  const fires         = canFire(member, attackerShip.shipClass);
+  const missiles      = usesMissiles(member, attackerShip.shipClass);
   const usesBallistic = isBallisticLockEligible(member, attackerShip);
 
   const precisao    = getPrecisao(member);
@@ -74,9 +77,26 @@ const CrewSlot = ({ member, attackerShip, allShips, onFire }) => {
   const ballisticLockLevel = member.ballisticLockLevel || 0;
   const isBallisticAiming  = !!member.ballisticTarget;
 
-  // Modificadores de proximidade para exibição no slot
-  const proximity = attackerShip.proximity ?? 3;
-  const proxMods  = getProximityModifiers(proximity, attackerShip.isDerrapando);
+  // Proximidade do atacante (inimigo) em relação a cada alvo aliado
+  // Para inimigos, a proximidade é lida da matriz: getProximity(aliadoId, inimigoId)
+  // O atacante é inimigo → procuramos a menor proximidade com qualquer aliado
+  // (ou usamos o targetId selecionado para pegar a prox específica)
+  const getProxForTarget = (tId) => {
+    // Se o alvo é aliado, pegamos getProximity(tId, attackerShip.id)
+    // Se o alvo é inimigo, getProximity(attackerShip.id, tId)
+    const ships = allShips;
+    const target = ships[tId];
+    if (!target) return 3;
+    if (!target.isEnemy) {
+      // atacante inimigo → alvo aliado: prox = getProximity(aliadoId, inimigoId)
+      return getProximity(tId, attackerShip.id);
+    }
+    // atacante inimigo → alvo inimigo (fogo amigo, raro)
+    return 3;
+  };
+
+  const proximity   = targetId ? getProxForTarget(targetId) : 3;
+  const proxMods    = getProximityModifiers(proximity, attackerShip.isDerrapando);
 
   const targetOptions = Object.values(allShips)
     .filter((s) => s.id !== attackerShip.id && s.status !== "desativada" && s.status !== "destruida")
@@ -159,7 +179,6 @@ const CrewSlot = ({ member, attackerShip, allShips, onFire }) => {
         </span>
       </div>
 
-      {/* ── Indicador de lock MÍSSIL ── */}
       {missiles && (
         <div className="tc-missile-lock-indicator">
           <span className="tc-lock-label">LOCK MSL:</span>
@@ -169,7 +188,6 @@ const CrewSlot = ({ member, attackerShip, allShips, onFire }) => {
         </div>
       )}
 
-      {/* ── Indicador de lock BALÍSTICO ── */}
       {usesBallistic && (
         <div className="tc-ballistic-lock-indicator">
           <span className="tc-lock-label tc-lock-label--ballistic">LOCK BAL:</span>
@@ -179,11 +197,11 @@ const CrewSlot = ({ member, attackerShip, allShips, onFire }) => {
         </div>
       )}
 
-      {/* ── Indicador de Proximidade no Slot ── */}
-      {proximity !== 3 && (
-        <div className={`tc-prox-slot-badge ${proxMods.blocked ? 'blocked' : proxMods.advantageBonus > 0 ? 'advantage' : 'penalty'}`}>
+      {/* Badge de proximidade: aparece após selecionar alvo */}
+      {targetId && (
+        <div className={`tc-prox-slot-badge ${proxMods.blocked ? 'blocked' : proxMods.advantageBonus > 0 ? 'advantage' : proximity === 4 ? 'penalty' : ''}`}>
           P{proximity}
-          {proxMods.blocked        && ' 🚫 BLOQUEADO'}
+          {proxMods.blocked         && ' 🚫 BLOQUEADO'}
           {proxMods.advantageBonus > 0 && ` +${proxMods.advantageBonus}d VTG`}
           {proxMods.precisionMultiplier < 1 && ' PREC÷2'}
           {attackerShip.isDerrapando && ' −20%'}
@@ -210,12 +228,13 @@ const CrewSlot = ({ member, attackerShip, allShips, onFire }) => {
           >
             <option value="">— Selecionar Alvo —</option>
             {targetOptions.map((s) => {
-              const tProx = s.proximity;
-              const tBlocked = tProx !== undefined && getProximityModifiers(tProx).blocked;
+              // Para opções aliadas, mostrar proximidade do alvo em relação ao atacante
+              const tProx = s.isEnemy ? 3 : getProximity(s.id, attackerShip.id);
+              const tBlocked = !s.isEnemy && getProximityModifiers(tProx).blocked;
               return (
                 <option key={s.id} value={s.id} disabled={tBlocked}>
                   {s.isEnemy ? "[HOSTIL]" : "[ALIADA]"} {s.name}
-                  {tProx !== undefined ? ` [P${tProx}]` : ""}
+                  {!s.isEnemy ? ` [P${tProx}]` : ""}
                   {tBlocked ? " 🚫" : ""}
                 </option>
               );
@@ -317,12 +336,20 @@ const TacticalCard = ({ ship, allShips, onFire, onUpdate }) => {
   const enginesStatus = ship.enginesStatus || 'operacional';
   const enginesTurnos = ship.enginesTurnosParaReparo || 0;
 
-  const proximity = ship.proximity ?? 3;
+  // Para o card tático (inimigos), mostramos a proximidade mínima
+  // com qualquer aliado (pior caso para o inimigo = mais próximo)
+  const allies = Object.values(allShips).filter(s => !s.isEnemy);
+  const proxPerAlly = allies.map(a => ({
+    aliadoName: a.name.split(" ")[0],
+    prox: getProximity(a.id, ship.id),
+  }));
+  const minProx = proxPerAlly.length > 0 ? Math.min(...proxPerAlly.map(x => x.prox)) : 3;
+
   const proxColor =
-    proximity <= 1 ? "#ff3c1e" :
-    proximity === 2 ? "#ff8c00" :
-    proximity === 3 ? "#ffae00" :
-    proximity === 4 ? "#4a9eff" : "#6b7a8d";
+    minProx <= 1 ? "#ff3c1e" :
+    minProx === 2 ? "#ff8c00" :
+    minProx === 3 ? "#ffae00" :
+    minProx === 4 ? "#4a9eff" : "#6b7a8d";
 
   return (
     <div className={`tc-card ${isDestroyed ? "is-destroyed" : ""}`}>
@@ -335,14 +362,28 @@ const TacticalCard = ({ ship, allShips, onFire, onUpdate }) => {
             {ship.shipClass === "type_III" ? "CLASSE III" : "CLASSE II"}
           </span>
           <span className="tc-card-ship-name">{ship.name}</span>
-          {/* Badge de Proximidade no Card */}
-          <span
-            className="tc-card-prox-badge"
-            style={{ borderColor: proxColor, color: proxColor }}
-          >
-            P{proximity}
-          </span>
-          {/* Badge de Derrapagem */}
+          {/* Proximidades por aliado */}
+          {proxPerAlly.length > 0 && (
+            <div className="tc-card-prox-multi">
+              {proxPerAlly.map(({ aliadoName, prox }) => {
+                const c =
+                  prox <= 1 ? "#ff3c1e" :
+                  prox === 2 ? "#ff8c00" :
+                  prox === 3 ? "#ffae00" :
+                  prox === 4 ? "#4a9eff" : "#6b7a8d";
+                return (
+                  <span
+                    key={aliadoName}
+                    className="tc-card-prox-badge"
+                    style={{ borderColor: c, color: c }}
+                    title={aliadoName}
+                  >
+                    {aliadoName.slice(0, 4)} P{prox}
+                  </span>
+                );
+              })}
+            </div>
+          )}
           {ship.isDerrapando && (
             <span className="tc-card-derrap-badge">DERRAP</span>
           )}
@@ -435,6 +476,10 @@ const TerminalCombate = ({ onBack }) => {
   const [activeEnemies, setActiveEnemies] = useState([]);
   const [combatLog,     setCombatLog]     = useState([]);
   const [lastRefresh,   setLastRefresh]   = useState(new Date());
+
+  // Seletor de nave aliada para o radar do Terminal
+  const [selectedAllyId, setSelectedAllyId] = useState("");
+
   const turnSound         = useRef(new Audio('/passarturno.wav'));
   const missileReadySound = useRef(new Audio('/missileready.wav'));
   const [modalConfig, setModalConfig] = useState({ isOpen: false });
@@ -447,12 +492,13 @@ const TerminalCombate = ({ onBack }) => {
     setLastRefresh(new Date());
   };
 
-  // Encontra a nave dos jogadores (primeira aliada não destruída com atributos)
-  const playerShipId = Object.keys(allShips).find(id =>
-    !allShips[id].isEnemy &&
-    allShips[id].status !== "destruida" &&
-    Object.keys(allShips[id].attributes || {}).length > 0
-  ) ?? "";
+  // Naves aliadas disponíveis para perspectiva do radar
+  const alliedShips = Object.values(allShips).filter(
+    s => !s.isEnemy && s.status !== "destruida" && Object.keys(s.attributes || {}).length > 0
+  );
+
+  // ID da nave aliada exibida no radar (auto-seleciona a primeira)
+  const radarShipId = selectedAllyId || alliedShips[0]?.id || "";
 
   useEffect(() => {
     document.body.style.cursor = "url('/normal.cur'), auto";
@@ -468,7 +514,7 @@ const TerminalCombate = ({ onBack }) => {
         addLog({ hit: data.damage > 0, text: data.logText, isShield: data.shieldHit, isEngines: data.enginesHit });
         refresh();
       }
-      if (e.key === "heavens_door_ships_db") refresh();
+      if (e.key === "heavens_door_ships_db" || e.key === "heavens_door_proximity_matrix") refresh();
     };
     window.addEventListener('storage', handlePlayerAttack);
     return () => window.removeEventListener('storage', handlePlayerAttack);
@@ -487,13 +533,27 @@ const TerminalCombate = ({ onBack }) => {
 
     const attackerCrewMember = ships[attackerShip.id].activeCrew.find(m => m.id === member.id);
 
+    // ── Proximidade: atacante (inimigo) → alvo ────────────────────────────────
+    // Se o alvo é aliado: prox = getProximity(aliadoId, inimigoId)
+    const targetShipData = ships[targetId];
+    let proximity = 3;
+    if (!targetShipData.isEnemy) {
+      // atacante é inimigo, alvo é aliado
+      proximity = getProximity(targetId, attackerShip.id);
+    }
+    const proxMods = getProximityModifiers(proximity, attackerShip.isDerrapando);
+
+    if (proxMods.blocked) {
+      addLog({ hit: false, text: `🚫 ${attackerShip.name} - ${member.function}: Fora de alcance (P${proximity}). Ataque bloqueado.` });
+      return;
+    }
+
     // ── FLUXO DE MÍSSIL ──────────────────────────────────────────────────────
     if (missiles) {
       if (attackerShip.missileCooldown > 0) {
         addLog({ hit: false, text: `⏳ ${attackerShip.name}: Sistemas de mísseis em recarga (${attackerShip.missileCooldown}t restantes).` });
         return;
       }
-
       if (attackerShip.shipClass !== "type_II") {
         if (attackerCrewMember.missileTarget !== targetId) {
           attackerCrewMember.missileTarget    = targetId;
@@ -532,15 +592,6 @@ const TerminalCombate = ({ onBack }) => {
       }
     }
 
-    // ── MODIFICADORES DE PROXIMIDADE E DERRAPAGEM ─────────────────────────────
-    const proximity  = attackerShip.proximity ?? 3;
-    const proxMods   = getProximityModifiers(proximity, attackerShip.isDerrapando);
-
-    if (proxMods.blocked) {
-      addLog({ hit: false, text: `🚫 ${attackerShip.name} - ${member.function}: Fora de alcance (P${proximity}). Ataque bloqueado.` });
-      return;
-    }
-
     const precisao    = member.precisao || 50;
     const attrLevel   = attackerShip.attributes[missiles ? "missiles" : "weapons"];
     const effectStr   = getEffect(attackerShip.shipClass, missiles ? "missiles" : "weapons", attrLevel);
@@ -549,9 +600,7 @@ const TerminalCombate = ({ onBack }) => {
     const missileLockLevel   = attackerCrewMember.missileLockLevel   || 0;
     const ballisticLockLevel = attackerCrewMember.ballisticLockLevel || 0;
 
-    // ── Acúmulo total de vantagem: lock + proximidade ─────────────────────────
     let advantageLevel = 1 + proxMods.advantageBonus;
-
     if (missiles) {
       if (missileLockLevel === 2) advantageLevel += 1;
       if (missileLockLevel >= 3) advantageLevel += 2;
@@ -560,12 +609,10 @@ const TerminalCombate = ({ onBack }) => {
       if (ballisticLockLevel >= 3) advantageLevel += 2;
     }
 
-    // ── Precisão ajustada por distância + derrapagem ──────────────────────────
     const precisaoAjustada = Math.max(1,
       Math.round(precisao * proxMods.precisionMultiplier) + proxMods.derrapagemPenalty
     );
 
-    // Label de proximidade para o log
     const proxLabel =
       proximity <= 2 ? ` [P${proximity}/VTG+${proxMods.advantageBonus}]` :
       proximity === 4 ? ` [P${proximity}/PREC÷2]` :
@@ -602,7 +649,6 @@ const TerminalCombate = ({ onBack }) => {
       return;
     }
 
-    // ── ACERTOU — calcula dano ────────────────────────────────────────────────
     const { total: rawDamage, isCritico, breakdown } = rollDamage(effectStr, isExtremo);
     const shieldValue = parseShield(getEffect(target.shipClass, "shields", target.attributes.shields));
     const finalDamage = Math.max(0, rawDamage - shieldValue);
@@ -687,9 +733,9 @@ const TerminalCombate = ({ onBack }) => {
 
     const logRolls       = advantageLevel > 1 ? `[${allRolls.join(', ')}] -> ` : '';
     const advantageLabel =
-      advantageLevel === 2 ? " [VANTAGEM]"       :
-      advantageLevel === 3 ? " [DUPLA VTG]"      :
-      advantageLevel >= 4  ? " [SUPER VTG]"      : "";
+      advantageLevel === 2 ? " [VANTAGEM]"  :
+      advantageLevel === 3 ? " [DUPLA VTG]" :
+      advantageLevel >= 4  ? " [SUPER VTG]" : "";
 
     const msg = [
       `${member.id} [${weaponLabel} Nv.${attrLevel}: ${effectStr}]${proxLabel}${advantageLabel}`,
@@ -715,7 +761,6 @@ const TerminalCombate = ({ onBack }) => {
 
     addLog({ hit: true, text: msg, isShield: isShieldHit, isEngines: isEnginesHit });
 
-    // ── Limpeza pós-disparo ───────────────────────────────────────────────────
     const finalShips = getAllShips();
     const finalAttackerCrew = finalShips[attackerShip.id].activeCrew.find(m => m.id === member.id);
 
@@ -881,6 +926,7 @@ const TerminalCombate = ({ onBack }) => {
       <div className="tc-layout">
         {/* ── Cards de Naves Inimigas ── */}
         <div className="tc-body">
+          {/* Matriz de Proximidade editável */}
           {activeEnemies.length === 0 ? (
             <div className="tc-empty">
               <div className="tc-empty-icon">◉</div>
@@ -899,13 +945,30 @@ const TerminalCombate = ({ onBack }) => {
           )}
         </div>
 
-        {/* ── Radar Tático do Mestre ── */}
+        {/* ── Radar Tático do Mestre (perspectiva da aliada selecionada) ── */}
         <div className="tc-radar-panel">
-          <RadarTatico
-            playerShipId={playerShipId}
-            playerRole="mestre"
-            onProximityChange={refresh}
-          />
+          {/* Seletor de nave aliada para perspectiva do radar */}
+          {alliedShips.length > 1 && (
+            <div className="tc-radar-ally-selector">
+              <span className="tc-radar-ally-label">PERSPECTIVA:</span>
+              <select
+                className="tc-radar-ally-select"
+                value={selectedAllyId}
+                onChange={e => setSelectedAllyId(e.target.value)}
+              >
+                {alliedShips.map(s => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          {radarShipId && (
+            <RadarTatico
+              playerShipId={radarShipId}
+              playerRole="mestre"
+              onProximityChange={refresh}
+            />
+          )}
         </div>
 
         {/* ── Log de Combate ── */}
