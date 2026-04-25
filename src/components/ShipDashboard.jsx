@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from "react";
 import "../styles/ShipDashboard.css";
 import { canEdit } from "../utils/rolePermissions";
 import { calculateRemainingPoints, getEffect } from "../utils/effectHelpers";
-import { shipsDatabase } from "../data/ships";
 import ShipRadarChart from "./ShipRadarChart";
 import AssignCrew from "./AssignCrew";
 import { removePlayerFromAllCrews, getProximityModifiers } from "../utils/mockApi";
@@ -12,7 +11,6 @@ import ConfirmModal from "./ConfirmModal";
 import RadarTatico from "./RadarTatico";
 import { db } from "../utils/firebase";
 import { doc, onSnapshot } from "firebase/firestore";
-import { getDoc, setDoc } from "firebase/firestore";
 
 const ShipDashboard = ({ playerData, onLogout }) => {
 

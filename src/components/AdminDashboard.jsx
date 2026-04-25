@@ -55,7 +55,6 @@ const AdminDashboard = ({ onLogout }) => {
   // Estados para a Aba 04 (Alterar Mestre)
   const [alterSelectedId, setAlterSelectedId] = useState("");
   const [alterDraft, setAlterDraft] = useState(null);
-  //const [manualSpeed, setManualSpeed] = useState("");
 
   // 2. PEDIDOS DE REPARO AGORA LÊM DO FIREBASE
   useEffect(() => {
@@ -114,8 +113,9 @@ const AdminDashboard = ({ onLogout }) => {
       }
     };
     loadFleet();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, selectedShipId]);
-
+  
   const handleSelectShip = (shipId, data = fleetData) => {
     setSelectedShipId(shipId);
     const ship = data[shipId];

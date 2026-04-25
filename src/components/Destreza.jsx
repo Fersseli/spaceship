@@ -1,72 +1,85 @@
-import React, { useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import { playersList } from "../utils/players";
 import { shipsList } from "../data/ships";
 import { getAllShips } from "../utils/mockApi";
 import "../styles/Destreza.css";
 
 const DexterityRanking = ({ onClose }) => {
-  const rankedPlayers = useMemo(() => {
-    const rawMappedData = playersList.map((player) => {
-      const rawRole = localStorage.getItem(`role_${player.id}`);
-      const currentRole = (rawRole === "piloto" || rawRole === "copiloto") ? rawRole : "tripulante";
-      
-      const savedShipId = localStorage.getItem(`ship_${player.id}`) || "hawthorne_iii"; 
-      const shipLabel = shipsList.find(s => s.id === savedShipId)?.label || "MS Hawthorne III";
-      
-      let assignedFunction = "LIVRE"; 
+  const [rankedPlayers, setRankedPlayers] = useState([]);
 
-      try {
-        const crewKey = `crew_assignments_${savedShipId}`;
-        const crew = JSON.parse(localStorage.getItem(crewKey) || '{"copiloto": null, "torretas": {}}');
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      const rawMappedData = playersList.map((player) => {
+        const rawRole     = localStorage.getItem(`role_${player.id}`);
+        const currentRole = (rawRole === "piloto" || rawRole === "copiloto") ? rawRole : "tripulante";
+        const savedShipId = localStorage.getItem(`ship_${player.id}`) || "hawthorne_iii";
+        const shipLabel   = shipsList.find((s) => s.id === savedShipId)?.label || "MS Hawthorne III";
 
-        if (currentRole === "piloto") {
-          assignedFunction = "PILOTO";
-        } else if (crew.copiloto === player.id) {
-          assignedFunction = "COPILOTO";
-        } else {
-          const torretaEntry = Object.entries(crew.torretas || {}).find(([_, uid]) => uid === player.id);
-          if (torretaEntry) {
-            assignedFunction = `TORRETA ${torretaEntry[0].toUpperCase()}`;
+        let assignedFunction = "LIVRE";
+        try {
+          const crewKey = `crew_assignments_${savedShipId}`;
+          const crew = JSON.parse(
+            localStorage.getItem(crewKey) || '{"copiloto": null, "torretas": {}}'
+          );
+          if (currentRole === "piloto") {
+            assignedFunction = "PILOTO";
+          } else if (crew.copiloto === player.id) {
+            assignedFunction = "COPILOTO";
+          } else {
+            const torretaEntry = Object.entries(crew.torretas || {}).find(
+              ([, uid]) => uid === player.id
+            );
+            if (torretaEntry) {
+              assignedFunction = `TORRETA ${torretaEntry[0].toUpperCase()}`;
+            }
           }
+        } catch (e) {
+          // mantém LIVRE
         }
-      } catch (e) {}
 
-      return {
-        id: player.id,
-        label: player.label,
-        des: player.des,
-        esq: player.esq,
-        ship: shipLabel,
-        function: assignedFunction,
-        isEnemy: false
-      };
-    });
+        return {
+          id:       player.id,
+          label:    player.label,
+          des:      player.des,
+          esq:      player.esq,
+          ship:     shipLabel,
+          function: assignedFunction,
+          isEnemy:  false,
+        };
+      });
 
-    const dbShips = getAllShips();
-    const enemyCrewMembers = [];
-    Object.values(dbShips).forEach(ship => {
-      if (ship.isEnemy && ship.status === "ativa" && ship.activeCrew) {
-        ship.activeCrew.forEach(member => {
-          enemyCrewMembers.push({
-            id: member.id,
-            label: member.id,
-            des: member.des,
-            esq: member.esq,
-            ship: ship.name,
-            function: member.function,
-            isEnemy: true
+      const dbShips = await getAllShips();
+      if (cancelled) return;
+
+      const enemyCrewMembers = [];
+      Object.values(dbShips).forEach((ship) => {
+        if (ship.isEnemy && ship.status === "ativa" && ship.activeCrew) {
+          ship.activeCrew.forEach((member) => {
+            enemyCrewMembers.push({
+              id:       member.id,
+              label:    member.id,
+              des:      member.des,
+              esq:      member.esq,
+              ship:     ship.name,
+              function: member.function,
+              isEnemy:  true,
+            });
           });
-        });
-      }
-    });
+        }
+      });
 
-    const combinedData = [...rawMappedData, ...enemyCrewMembers];
-    combinedData.sort((a, b) => {
-      if (b.des !== a.des) return b.des - a.des;
-      return b.esq - a.esq;
-    });
+      const combinedData = [...rawMappedData, ...enemyCrewMembers];
+      combinedData.sort((a, b) => {
+        if (b.des !== a.des) return b.des - a.des;
+        return b.esq - a.esq;
+      });
 
-    return combinedData;
+      setRankedPlayers(combinedData);
+    };
+
+    load();
+    return () => { cancelled = true; };
   }, []);
 
   return (
@@ -79,17 +92,23 @@ const DexterityRanking = ({ onClose }) => {
           </div>
           <button className="dex-close" onClick={onClose}>✕</button>
         </div>
-        
+
         <div className="dex-body">
+          {rankedPlayers.length === 0 && (
+            <div style={{ color: "rgba(255,255,255,0.3)", fontFamily: "'JetBrains Mono', monospace", fontSize: "0.7rem", padding: "1rem" }}>
+              Carregando...
+            </div>
+          )}
           {rankedPlayers.map((p, index) => (
-            <div key={`${p.id}-${index}`} className={`dex-card ${p.isEnemy ? 'enemy' : 'ally'}`}>
+            <div key={`${p.id}-${index}`} className={`dex-card ${p.isEnemy ? "enemy" : "ally"}`}>
               <div className="dex-row-top">
                 <span className="dex-name">
-                  <span className="dex-index">{String(index + 1).padStart(2, '0')}.</span> 
+                  <span className="dex-index">{String(index + 1).padStart(2, "0")}.</span>
                   <span className="dex-cmdt">CMDT.</span> {p.label}
                 </span>
                 <span className="dex-stats">
-                  <span className="dex-stat-lbl">D:</span>{p.des} <span className="dex-stat-lbl">E:</span>{p.esq}
+                  <span className="dex-stat-lbl">D:</span>{p.des}{" "}
+                  <span className="dex-stat-lbl">E:</span>{p.esq}
                 </span>
               </div>
               <div className="dex-row-bottom">

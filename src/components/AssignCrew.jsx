@@ -1,46 +1,61 @@
 import React, { useState, useEffect } from "react";
 import { playersList } from "../utils/players";
-import { getShipData, removePlayerFromAllCrews } from "../utils/mockApi";
+import { getShipData, getAllShips } from "../utils/mockApi";
+import { db } from "../utils/firebase";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import "../styles/AssignCrew.css";
 
 const CREW_STORAGE_KEY = "crew_assignments";
 
-const loadAssignments = (shipId) => {
+const loadAssignments = async (shipId) => {
   try {
-    const raw = localStorage.getItem(`${CREW_STORAGE_KEY}_${shipId}`);
-    return raw ? JSON.parse(raw) : { copiloto: null, torretas: {} };
+    const snap = await getDoc(doc(db, "gameData", "crewAssignments"));
+    if (snap.exists()) {
+      const all = snap.data();
+      return all[`${CREW_STORAGE_KEY}_${shipId}`] || { copiloto: null, torretas: {} };
+    }
+    return { copiloto: null, torretas: {} };
   } catch {
     return { copiloto: null, torretas: {} };
   }
 };
 
-const saveAssignments = (shipId, data) => {
-  localStorage.setItem(`${CREW_STORAGE_KEY}_${shipId}`, JSON.stringify(data));
+const saveAssignments = async (shipId, data) => {
+  const snap = await getDoc(doc(db, "gameData", "crewAssignments"));
+  const all = snap.exists() ? snap.data() : {};
+  all[`${CREW_STORAGE_KEY}_${shipId}`] = data;
+  await setDoc(doc(db, "gameData", "crewAssignments"), all);
 };
 
 const AssignCrew = ({ currentPlayer, currentRole, onClose }) => {
-  const isPilot  = currentRole === "piloto";
-  const shipId   = currentPlayer.ship;
+  const isPilot = currentRole === "piloto";
+  const shipId  = currentPlayer.ship;
 
-  const [shipData, setShipData] = useState(() => getShipData(shipId));
-  const crewConfig = shipData?.crew;
-  const TORRETAS   = crewConfig?.torretas ?? [];
-  const hasCopiloto = crewConfig?.hasCopiloto ?? true;
+  const [shipData,     setShipData]     = useState(null);
+  const [assignments,  setAssignments]  = useState({ copiloto: null, torretas: {} });
+  const [onlineMap,    setOnlineMap]    = useState({});
+  const [error,        setError]        = useState("");
+  const [loading,      setLoading]      = useState(true);
 
-  const [assignments, setAssignments] = useState(() => loadAssignments(shipId));
-  const [onlineMap, setOnlineMap]     = useState({});
-  const [error, setError]             = useState("");
-
+  // Carrega dados da nave e assignments do Firebase
   useEffect(() => {
-    const handleStorageChange = (e) => {
-      if (e.key === "heavens_door_ships_db") {
-        setShipData(getShipData(shipId));
+    let cancelled = false;
+    const load = async () => {
+      const [ship, asgn] = await Promise.all([
+        getShipData(shipId),
+        loadAssignments(shipId),
+      ]);
+      if (!cancelled) {
+        setShipData(ship);
+        setAssignments(asgn);
+        setLoading(false);
       }
     };
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+    load();
+    return () => { cancelled = true; };
   }, [shipId]);
 
+  // Escuta mudanças de status online dos jogadores
   useEffect(() => {
     const readOnline = () => {
       const map = {};
@@ -53,6 +68,41 @@ const AssignCrew = ({ currentPlayer, currentRole, onClose }) => {
     const interval = setInterval(readOnline, 3000);
     return () => clearInterval(interval);
   }, []);
+
+  // Recarrega dados da nave quando o Firebase muda (via storage event legado, mantido por compatibilidade)
+  useEffect(() => {
+    const handleStorageChange = async (e) => {
+      if (e.key === "heavens_door_ships_db") {
+        const ship = await getShipData(shipId);
+        setShipData(ship);
+      }
+    };
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, [shipId]);
+
+  if (loading || !shipData) {
+    return (
+      <div className="assign-overlay" onClick={onClose}>
+        <div className="assign-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="assign-header">
+            <div className="assign-header-left">
+              <div className="assign-alert-dot" />
+              <div>
+                <div className="assign-eyebrow">HEAVEN'S DOOR // CREW MGT</div>
+                <h2 className="assign-title">CARREGANDO...</h2>
+              </div>
+            </div>
+            <button className="assign-close" onClick={onClose}>×</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const crewConfig  = shipData?.crew;
+  const TORRETAS    = crewConfig?.torretas ?? [];
+  const hasCopiloto = crewConfig?.hasCopiloto ?? true;
 
   const crewPlayers = playersList.filter((p) => {
     if (p.id === currentPlayer.nickname) return false;
@@ -91,7 +141,7 @@ const AssignCrew = ({ currentPlayer, currentRole, onClose }) => {
     });
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (hasCopiloto && !assignments.copiloto) {
       setError("É necessário definir um co-piloto para salvar.");
       return;
@@ -110,7 +160,7 @@ const AssignCrew = ({ currentPlayer, currentRole, onClose }) => {
         }
       });
     }
-    saveAssignments(shipId, assignments);
+    await saveAssignments(shipId, assignments);
     onClose();
   };
 
@@ -125,17 +175,17 @@ const AssignCrew = ({ currentPlayer, currentRole, onClose }) => {
     return "Tripulante";
   };
 
-  // ─── Dados do escudo da nave ──────────────────────────────────────────────
-  const shieldStatus = shipData?.shieldStatus || 'operacional';
-  const shieldTurnos = shipData?.shieldTurnosParaReparo || 0;
-
-  // ─── Dados dos motores da nave ────────────────────────────────────────────
-  const enginesStatus = shipData?.enginesStatus || 'operacional';
+  const shieldStatus  = shipData?.shieldStatus  || "operacional";
+  const shieldTurnos  = shipData?.shieldTurnosParaReparo  || 0;
+  const enginesStatus = shipData?.enginesStatus || "operacional";
   const enginesTurnos = shipData?.enginesTurnosParaReparo || 0;
 
-  const handleShieldRepairRequest = () => {
-    const requests = JSON.parse(localStorage.getItem("repair_requests") || "[]");
-    const alreadyRequested = requests.some(r => r.moduleId === "__shield__" && r.shipId === shipId);
+  const handleShieldRepairRequest = async () => {
+    const snap = await getDoc(doc(db, "gameData", "repairRequests"));
+    const requests = snap.exists() ? (snap.data().requests || []) : [];
+    const alreadyRequested = requests.some(
+      (r) => r.moduleId === "__shield__" && r.shipId === shipId
+    );
     if (alreadyRequested) {
       alert("Já existe uma solicitação de reparo dos escudos em andamento.");
       return;
@@ -143,19 +193,24 @@ const AssignCrew = ({ currentPlayer, currentRole, onClose }) => {
     const newRequest = {
       id: Date.now(),
       shipName: shipData.name,
-      shipId: shipId,
+      shipId,
       module: "Escudos",
       moduleId: "__shield__",
       pilot: currentPlayer.nickname,
       isShield: true,
     };
-    localStorage.setItem("repair_requests", JSON.stringify([...requests, newRequest]));
+    await setDoc(doc(db, "gameData", "repairRequests"), {
+      requests: [...requests, newRequest],
+    });
     alert("Solicitação de reparo dos escudos enviada ao comando.");
   };
 
-  const handleEnginesRepairRequest = () => {
-    const requests = JSON.parse(localStorage.getItem("repair_requests") || "[]");
-    const alreadyRequested = requests.some(r => r.moduleId === "__engines__" && r.shipId === shipId);
+  const handleEnginesRepairRequest = async () => {
+    const snap = await getDoc(doc(db, "gameData", "repairRequests"));
+    const requests = snap.exists() ? (snap.data().requests || []) : [];
+    const alreadyRequested = requests.some(
+      (r) => r.moduleId === "__engines__" && r.shipId === shipId
+    );
     if (alreadyRequested) {
       alert("Já existe uma solicitação de reparo dos motores em andamento.");
       return;
@@ -163,14 +218,33 @@ const AssignCrew = ({ currentPlayer, currentRole, onClose }) => {
     const newRequest = {
       id: Date.now(),
       shipName: shipData.name,
-      shipId: shipId,
+      shipId,
       module: "Motores",
       moduleId: "__engines__",
       pilot: currentPlayer.nickname,
       isEngines: true,
     };
-    localStorage.setItem("repair_requests", JSON.stringify([...requests, newRequest]));
+    await setDoc(doc(db, "gameData", "repairRequests"), {
+      requests: [...requests, newRequest],
+    });
     alert("Solicitação de reparo dos motores enviada ao comando.");
+  };
+
+  const handleTorretaRepairRequest = async (torreta, memberData) => {
+    const snap = await getDoc(doc(db, "gameData", "repairRequests"));
+    const requests = snap.exists() ? (snap.data().requests || []) : [];
+    const newRequest = {
+      id: Date.now(),
+      shipName: shipData.name,
+      shipId,
+      module: torreta.label,
+      moduleId: memberData.id,
+      pilot: currentPlayer.nickname,
+    };
+    await setDoc(doc(db, "gameData", "repairRequests"), {
+      requests: [...requests, newRequest],
+    });
+    alert("Solicitação de reparo enviada ao comando.");
   };
 
   return (
@@ -232,10 +306,10 @@ const AssignCrew = ({ currentPlayer, currentRole, onClose }) => {
                         </button>
                       )}
                       {TORRETAS.map((torreta) => {
-                        const ocupado     = assignments.torretas[torreta.id];
+                        const ocupado      = assignments.torretas[torreta.id];
                         const torretaEntry = Object.entries(assignments.torretas).find(([, v]) => v === player.id);
                         const torretaAtual = torretaEntry ? torretaEntry[0] : null;
-                        const isMinha  = torretaAtual === torreta.id;
+                        const isMinha   = torretaAtual === torreta.id;
                         const bloqueado = isCopiloto || (!isMinha && ocupado && ocupado !== player.id);
 
                         return (
@@ -272,11 +346,11 @@ const AssignCrew = ({ currentPlayer, currentRole, onClose }) => {
             )}
 
             {TORRETAS.map((torreta) => {
-              const ocupante  = assignments.torretas[torreta.id];
-              const memberData = shipData?.activeCrew?.find(m =>
-                m.id === torreta.id || m.function.includes(torreta.id.toUpperCase())
+              const ocupante   = assignments.torretas[torreta.id];
+              const memberData = shipData?.activeCrew?.find(
+                (m) => m.id === torreta.id || m.function.includes(torreta.id.toUpperCase())
               );
-              const status = memberData?.moduleStatus || 'operacional';
+              const status = memberData?.moduleStatus || "operacional";
               const turnos = memberData?.turnosParaReparo || 0;
 
               return (
@@ -284,22 +358,15 @@ const AssignCrew = ({ currentPlayer, currentRole, onClose }) => {
                   <div className="assign-torreta-header">
                     <span className="assign-torreta-name">{torreta.label}</span>
                     <div className="assign-status-dots">
-                      {status === "avariada" && Array.from({ length: turnos }).map((_, i) => (
-                        <span key={i} className="status-dot purple"></span>
-                      ))}
+                      {status === "avariada" &&
+                        Array.from({ length: turnos }).map((_, i) => (
+                          <span key={i} className="status-dot purple" />
+                        ))}
                     </div>
-                    {isPilot && status === "avariada" && (
+                    {isPilot && status === "avariada" && memberData && (
                       <button
                         className="assign-repair-btn"
-                        onClick={() => {
-                          const requests = JSON.parse(localStorage.getItem("repair_requests") || "[]");
-                          const newRequest = {
-                            id: Date.now(), shipName: shipData.name, shipId: shipId,
-                            module: torreta.label, moduleId: memberData.id, pilot: currentPlayer.nickname
-                          };
-                          localStorage.setItem("repair_requests", JSON.stringify([...requests, newRequest]));
-                          alert("Solicitação de reparo enviada ao comando.");
-                        }}
+                        onClick={() => handleTorretaRepairRequest(torreta, memberData)}
                       >
                         REPARO
                       </button>
@@ -313,81 +380,88 @@ const AssignCrew = ({ currentPlayer, currentRole, onClose }) => {
               );
             })}
 
-            {/* ─── CARD DE ESCUDOS ──────────────────────────────────── */}
+            {/* CARD DE ESCUDOS */}
             <div className={`assign-torreta-card assign-shield-card status-${shieldStatus}`}>
               <div className="assign-torreta-header">
                 <span className="assign-torreta-name">🛡 ESCUDOS</span>
                 <div className="assign-status-dots">
-                  {shieldStatus !== 'operacional' && Array.from({ length: shieldTurnos }).map((_, i) => (
-                    <span
-                      key={i}
-                      className={`status-dot ${shieldStatus === 'destruida' ? 'black' : 'purple'}`}
-                      title={`${shieldTurnos} turno(s) restante(s)`}
-                    />
-                  ))}
+                  {shieldStatus !== "operacional" &&
+                    Array.from({ length: shieldTurnos }).map((_, i) => (
+                      <span
+                        key={i}
+                        className={`status-dot ${shieldStatus === "destruida" ? "black" : "purple"}`}
+                        title={`${shieldTurnos} turno(s) restante(s)`}
+                      />
+                    ))}
                 </div>
-                {isPilot && shieldStatus !== 'operacional' && (
+                {isPilot && shieldStatus !== "operacional" && (
                   <button className="assign-repair-btn" onClick={handleShieldRepairRequest}>
                     REPARO
                   </button>
                 )}
               </div>
               <div className="assign-torreta-caps">
-                {shieldStatus === 'operacional'  && 'OPERACIONAL · NÍVEL LIVRE'}
-                {shieldStatus === 'avariada'     && `AVARIADO · MÁX. NÍV. 2 · ${shieldTurnos}T`}
-                {shieldStatus === 'destruida'    && `OFFLINE · BLOQUEADO · ${shieldTurnos}T`}
+                {shieldStatus === "operacional" && "OPERACIONAL · NÍVEL LIVRE"}
+                {shieldStatus === "avariada"    && `AVARIADO · MÁX. NÍV. 2 · ${shieldTurnos}T`}
+                {shieldStatus === "destruida"   && `OFFLINE · BLOQUEADO · ${shieldTurnos}T`}
               </div>
               <div
-                className={`assign-torreta-ocupante ${shieldStatus === 'operacional' ? 'filled' : 'empty'}`}
+                className={`assign-torreta-ocupante ${shieldStatus === "operacional" ? "filled" : "empty"}`}
                 style={{
-                  color: shieldStatus === 'destruida' ? '#ff3c1e'
-                        : shieldStatus === 'avariada' ? '#ffae00'
-                        : '#4a9eff',
-                  fontSize: '0.7rem'
+                  color:
+                    shieldStatus === "destruida" ? "#ff3c1e"
+                    : shieldStatus === "avariada" ? "#ffae00"
+                    : "#4a9eff",
+                  fontSize: "0.7rem",
                 }}
               >
-                {shieldStatus === 'operacional' && '— NORMAL —'}
-                {shieldStatus === 'avariada'    && '— AVARIADO —'}
-                {shieldStatus === 'destruida'   && '— DESTRUÍDO —'}
+                {shieldStatus === "operacional" && "— NORMAL —"}
+                {shieldStatus === "avariada"    && "— AVARIADO —"}
+                {shieldStatus === "destruida"   && "— DESTRUÍDO —"}
               </div>
             </div>
 
-            {/* ─── CARD DE MOTORES ──────────────────────────────────── */}
+            {/* CARD DE MOTORES */}
             <div className={`assign-torreta-card assign-engines-card status-${enginesStatus}`}>
               <div className="assign-torreta-header">
                 <span className="assign-torreta-name">⚙ MOTORES</span>
                 <div className="assign-status-dots">
-                  {enginesStatus !== 'operacional' && Array.from({ length: enginesTurnos }).map((_, i) => (
-                    <span
-                      key={i}
-                      className={`status-dot ${enginesStatus === 'destruida' ? 'black' : 'orange'}`}
-                      title={`${enginesTurnos} turno(s) restante(s)`}
-                    />
-                  ))}
+                  {enginesStatus !== "operacional" &&
+                    Array.from({ length: enginesTurnos }).map((_, i) => (
+                      <span
+                        key={i}
+                        className={`status-dot ${enginesStatus === "destruida" ? "black" : "orange"}`}
+                        title={`${enginesTurnos} turno(s) restante(s)`}
+                      />
+                    ))}
                 </div>
-                {isPilot && enginesStatus !== 'operacional' && (
-                  <button className="assign-repair-btn assign-repair-btn--engines" onClick={handleEnginesRepairRequest}>
+                {isPilot && enginesStatus !== "operacional" && (
+                  <button
+                    className="assign-repair-btn assign-repair-btn--engines"
+                    onClick={handleEnginesRepairRequest}
+                  >
                     REPARO
                   </button>
                 )}
               </div>
               <div className="assign-torreta-caps">
-                {enginesStatus === 'operacional'  && 'OPERACIONAL · NÍVEL LIVRE'}
-                {enginesStatus === 'avariada'     && `AVARIADO · MÁX. NÍV. 3 · ${enginesTurnos}T`}
-                {enginesStatus === 'destruida'    && `OFFLINE · BLOQUEADO · ${enginesTurnos}T`}
+                {enginesStatus === "operacional" && "OPERACIONAL · NÍVEL LIVRE"}
+                {enginesStatus === "avariada"    && `AVARIADO · MÁX. NÍV. 3 · ${enginesTurnos}T`}
+                {enginesStatus === "destruida"   && `OFFLINE · BLOQUEADO · ${enginesTurnos}T`}
               </div>
               <div
-                className={`assign-torreta-ocupante ${enginesStatus === 'operacional' ? 'filled' : 'empty'}`}
+                className={`assign-torreta-ocupante ${enginesStatus === "operacional" ? "filled" : "empty"}`}
                 style={{
-                  color: enginesStatus === 'destruida' ? '#ff3c1e'
-                        : enginesStatus === 'avariada' ? '#ff8c00'
-                        : '#4a9eff',
-                  fontSize: '0.7rem'
+                  color:
+                    enginesStatus === "destruida" ? "#ff3c1e"
+                    : enginesStatus === "avariada" ? "#ff8c00"
+                    : "#4a9eff",
+                  fontSize: "0.7rem",
                 }}
               >
-                {enginesStatus === 'operacional' && '— NORMAL —'}
-                {enginesStatus === 'avariada'    && '— AVARIADO —'}
-                {enginesStatus === 'destruida'   && '— DESTRUÍDO —'}
+                {enginesStatus === "operacional" && "— NORMAL —"}
+                {enginesStatus === "avariada"    && "— AVARIADO —"}
+                {enginesStatus === "destruida"   && "— DESTRUÍDO —"}
               </div>
             </div>
           </div>
