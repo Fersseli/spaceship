@@ -32,8 +32,16 @@ const applySorting = (data, config) => {
     }
     const valA = (a[key] || "").toString().toLowerCase();
     const valB = (b[key] || "").toString().toLowerCase();
+    
     if (valA < valB) return direction === "asc" ? -1 : 1;
     if (valA > valB) return direction === "asc" ? 1 : -1;
+    
+    // NOVO CÓDIGO DE DESEMPATE: Se os valores forem iguais, ordena por nome
+    const labelA = (a.label || "").toString().toLowerCase();
+    const labelB = (b.label || "").toString().toLowerCase();
+    if (labelA < labelB) return -1;
+    if (labelA > labelB) return 1;
+
     return 0;
   });
 };
@@ -436,16 +444,19 @@ setProximityMatrix(matrix);
               <div className="fleet-list-panel">
                 <h3 className="fleet-panel-title">CATÁLOGO DE CLASSES</h3>
                 <div className="fleet-list">
-                  {Object.entries(fleetData).map(([id, ship]) => (
-                    <div
-                      key={id}
-                      className={`fleet-list-item ${selectedShipId === id ? "selected" : ""}`}
-                      onClick={() => handleSelectShip(id)}
-                    >
-                      {ship.isEnemy ? `[HOSTIL] ` : `[ALIADA] `}
-                      {ship.name.toUpperCase()}
-                    </div>
-                  ))}
+                  {Object.entries(fleetData)
+                    // ADICIONE ESTA LINHA ABAIXO PARA ORDENAR PELO NOME
+                    .sort(([, shipA], [, shipB]) => shipA.name.localeCompare(shipB.name))
+                    .map(([id, ship]) => (
+                      <div
+                        key={id}
+                        className={`fleet-list-item ${selectedShipId === id ? "selected" : ""}`}
+                        onClick={() => handleSelectShip(id)}
+                      >
+                        {ship.isEnemy ? `[HOSTIL] ` : `[ALIADA] `}
+                        {ship.name.toUpperCase()}
+                      </div>
+                    ))}
                 </div>
               </div>
 

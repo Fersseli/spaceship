@@ -19,11 +19,17 @@ const ShipRadarChart = ({ attributes }) => {
   };
 
   // Transforma o objeto de atributos em array para o Recharts
-  const data = Object.entries(attributes).map(([key, value]) => ({
-    subject: nameMap[key] || key.toUpperCase(),
-    value: value,
-    fullMark: 6,
-  }));
+  // Substitua isso:
+// const data = Object.entries(attributes).map(([key, value]) => ({ ... }));
+
+// Por isso:
+const fixedOrder = ["weapons", "missiles", "controls", "shields", "engines"];
+
+const data = fixedOrder.map(key => ({
+  subject: nameMap[key] || key.toUpperCase(),
+  value: attributes[key] || 0,
+  fullMark: 6,
+}));
 
   return (
     <div style={{ width: "100%", height: "100%", minHeight: "220px" }}>
