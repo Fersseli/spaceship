@@ -100,7 +100,10 @@ const CrewSlot = ({ member, attackerShip, allShips, proxMatrix, onFire }) => {
   const targetOptions = Object.values(allShips)
     .filter((s) => s.id !== attackerShip.id && s.status !== "desativada" && s.status !== "destruida")
     .sort((a, b) => {
-      if (a.isEnemy === b.isEnemy) return 0;
+      if (a.isEnemy === b.isEnemy) {
+        // DESEMPATE: Se forem os dois inimigos ou os dois aliados, ordena por nome
+        return a.name.localeCompare(b.name);
+      }
       return a.isEnemy ? 1 : -1;
     });
 
@@ -342,7 +345,7 @@ const TacticalCard = React.memo(({ ship, allShips, proxMatrix, onFire, onUpdate 
 
   // Para o card tático (inimigos), mostramos a proximidade mínima
   // com qualquer aliado (pior caso para o inimigo = mais próximo)
-  const allies = Object.values(allShips).filter(s => !s.isEnemy);
+  const allies = Object.values(allShips).filter(s => !s.isEnemy) .sort((a, b) => a.name.localeCompare(b.name)); // <-- ORDENAÇÃO ADICIONADA;
   const proxPerAlly = allies.map(a => {
     // Busca direto no state em vez de usar getProximity
     const key = `${a.id}__${ship.id}`;
@@ -491,7 +494,9 @@ const TerminalCombate = ({ onBack }) => {
   
   // 🚀 ADICIONE ESTE BLOCO AQUI:
   const activeEnemies = useMemo(() => {
-    return Object.values(allShips).filter((s) => s.isEnemy && s.status === "ativa");
+    return Object.values(allShips)
+      .filter((s) => s.isEnemy && s.status === "ativa")
+      .sort((a, b) => a.name.localeCompare(b.name)); // <-- ORDENAÇÃO ADICIONADA
   }, [allShips]);
   
   const [lastRefresh,   setLastRefresh]   = useState(new Date());
@@ -515,9 +520,9 @@ const TerminalCombate = ({ onBack }) => {
   };
   
   // Naves aliadas disponíveis para perspectiva do radar
-  const alliedShips = Object.values(allShips).filter(
-    s => !s.isEnemy && s.status !== "destruida" && Object.keys(s.attributes || {}).length > 0
-  );
+  const alliedShips = Object.values(allShips)
+    .filter(s => !s.isEnemy && s.status !== "destruida" && Object.keys(s.attributes || {}).length > 0)
+    .sort((a, b) => a.name.localeCompare(b.name)); // <-- ORDENAÇÃO ADICIONADA
 
   // ID da nave aliada exibida no radar (auto-seleciona a primeira)
   const radarShipId = selectedAllyId || alliedShips[0]?.id || "";
