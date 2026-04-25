@@ -1,5 +1,5 @@
-import React from "react";
-import { memo,
+import React, {memo} from "react";
+import {
   Radar,
   RadarChart,
   PolarGrid,
