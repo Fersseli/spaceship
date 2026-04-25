@@ -285,14 +285,22 @@ export const initDB = async () => {
 export const getAllShips = async () => {
   const docRef = doc(db, "gameData", "ships");
   const docSnap = await getDoc(docRef);
-  
+
   if (docSnap.exists()) {
-    return docSnap.data();
-  } else {
-    // Se não existir, retorna as naves padrão e já cria no banco
-    await setDoc(docRef, shipsDatabase);
-    return shipsDatabase;
+    const data = docSnap.data();
+
+    // Se o documento existe, mas está vazio, popula com as naves padrão
+    if (!data || Object.keys(data).length === 0) {
+      await setDoc(docRef, shipsDatabase);
+      return shipsDatabase;
+    }
+
+    return data;
   }
+
+  // Se o documento não existe, cria com as naves padrão
+  await setDoc(docRef, shipsDatabase);
+  return shipsDatabase;
 };
 
 // E em TODAS as funções onde você tinha localStorage.setItem(DB_KEY, ...), você vai usar:
