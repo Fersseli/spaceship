@@ -384,25 +384,37 @@ export const updateShipConfig = async (shipId, newData) => {
 export const clearDestroyedEnemies = async () => {
   const ships = await getAllShips();
   let changed = false;
-  Object.values(ships).forEach(s => {
+
+  for (const s of Object.values(ships)) {
     if (s.isEnemy && s.status === "destruida") {
-      removeProximityEntries(s.id);
-      s.status = "desativada"; s.activeCrew = []; changed = true;
+      await removeProximityEntries(s.id);
+      s.status = "desativada";
+      s.activeCrew = [];
+      changed = true;
     }
-  });
-  if (changed) await setDoc(doc(db, "gameData", "ships"), ships);;
+  }
+
+  if (changed) {
+    await setDoc(doc(db, "gameData", "ships"), ships);
+  }
 };
 
 export const deactivateAllEnemies = async () => {
   const ships = await getAllShips();
   let changed = false;
-  Object.values(ships).forEach(s => {
+
+  for (const s of Object.values(ships)) {
     if (s.isEnemy && s.status !== "desativada") {
-      removeProximityEntries(s.id);
-      s.status = "desativada"; s.activeCrew = []; changed = true;
+      await removeProximityEntries(s.id);
+      s.status = "desativada";
+      s.activeCrew = [];
+      changed = true;
     }
-  });
-  if (changed) await setDoc(doc(db, "gameData", "ships"), ships);
+  }
+
+  if (changed) {
+    await setDoc(doc(db, "gameData", "ships"), ships);
+  }
 };
 
 export const enemyNamesPool = [...new Set([
@@ -450,17 +462,17 @@ export const setEnemyShipStatus = async (shipId, newStatus) => {
     // Inicializa proximidade na matriz para todos os aliados
     ship.status = newStatus;
     await setDoc(doc(db, "gameData", "ships"), ships);
-    initEnemyProximity(shipId);
+    await initEnemyProximity(shipId);
     return;
   }
 
   if (newStatus === "desativada") {
     ship.activeCrew = [];
-    removeProximityEntries(shipId);
+    await removeProximityEntries(shipId);
   }
   if (newStatus === "destruida") {
     // mantém crew congelada, mas remove da matriz
-    removeProximityEntries(shipId);
+    await removeProximityEntries(shipId);
   }
 
   ship.status = newStatus;
@@ -570,7 +582,6 @@ export const processGlobalTurn = async () => {
   await setDoc(doc(db, "gameData", "ships"), ships);
   return relatorio;
 };
-
 export const processPlayerAttack = async (attackerShipId, targetShipId, inputDamage, isExtremo, weaponEffect, isMissile = false) => {
   // 1. Corrigido para camelCase: getAllShips
   const ships = await getAllShips();
@@ -645,9 +656,15 @@ export const processPlayerAttack = async (attackerShipId, targetShipId, inputDam
   if (moduleLog) tags.push(moduleLog);
 
   // 5. Adicionado await na leitura da proximidade
-  const proxVal = await getProximity(attackerShipId, targetShipId);
-  const proxInfo = target.isEnemy ? ` [P${proxVal}]` : "";
+let proxInfo = "";
 
+if (!attacker.isEnemy && target.isEnemy) {
+  const proxVal = await getProximity(attackerShipId, targetShipId);
+  proxInfo = ` [P${proxVal}]`;
+} else if (attacker.isEnemy && !target.isEnemy) {
+  const proxVal = await getProximity(targetShipId, attackerShipId);
+  proxInfo = ` [P${proxVal}]`;
+}
   const logText = [
     `${attacker.name} [ARMA FÍSICA: ${weaponEffect}]${proxInfo}`,
     `→ ${target.name}`,

@@ -4,9 +4,18 @@ import { canEdit } from "../utils/rolePermissions";
 import { calculateRemainingPoints, getEffect } from "../utils/effectHelpers";
 import ShipRadarChart from "./ShipRadarChart";
 import AssignCrew from "./AssignCrew";
-import { removePlayerFromAllCrews, getProximityModifiers } from "../utils/mockApi";
+import {
+  removePlayerFromAllCrews,
+  getProximityModifiers,
+  getProximityMatrix,
+  getShipData,
+  updateShipAttributes,
+  getAllShips,
+  processPlayerAttack,
+  updateShipConfig,
+  getShipMaxAttributes
+} from "../utils/mockApi";
 import DexterityRanking from "./Destreza";
-import { getShipData, updateShipAttributes, getAllShips, processPlayerAttack, updateShipConfig, getShipMaxAttributes } from "../utils/mockApi";
 import ConfirmModal from "./ConfirmModal";
 import RadarTatico from "./RadarTatico";
 import { db } from "../utils/firebase";
@@ -19,13 +28,15 @@ const ShipDashboard = ({ playerData, onLogout }) => {
   const [headerLog, setHeaderLog] = useState("");
   const [showAssignCrew, setShowAssignCrew] = useState(false);
   const [showDexterityModal, setShowDexterityModal] = useState(false);
-  const [shipDataState, setShipDataState] = useState(getShipData(playerData.ship));
+const [shipDataState, setShipDataState] = useState(null);
   const [showAttackModal, setShowAttackModal] = useState(false);
   const [attackTarget, setAttackTarget] = useState("");
   const [isExtremo, setIsExtremo] = useState(false);
   const [attackDamage, setAttackDamage] = useState("");
+  const [proximityMatrix, setProximityMatrix] = useState({});
   const [allShipsList, setAllShipsList] = useState([]);
-  const [combatJournal, setCombatJournal] = useState([]);
+  /*const [combatJournal, setCombatJournal] = useState([]);*/
+  const [currentRole, setCurrentRole] = useState(playerData.role);
 
   const [confirmState, setConfirmState] = useState({
     isOpen: false, title: "", message: "", subtext: "",
@@ -132,31 +143,7 @@ const ShipDashboard = ({ playerData, onLogout }) => {
       rechargeSound.current.playbackRate = 1.0;
     }, desiredDurationMs);
   };
-/*
-  useEffect(() => {
-    setAllShipsList(Object.values(getAllShips()));
-    const initialLog = JSON.parse(localStorage.getItem("combat_journal") || "[]");
-    setCombatJournal(initialLog);
 
-    const handleStorageChange = (e) => {
-      if (e.key === "heavens_door_ships_db") {
-        if (e.newValue) {
-          const allShips   = JSON.parse(e.newValue);
-          setAllShipsList(Object.values(allShips));
-          const updatedShip = allShips[playerData.ship];
-          if (updatedShip) {
-            setAttributes(updatedShip.attributes);
-            setShipDataState(updatedShip);
-          }
-        }
-      }
-      if (e.key === "combat_journal" && e.newValue) {
-        setCombatJournal(JSON.parse(e.newValue));
-      }
-    };
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, [playerData.ship]);*/
 
   // SUBSTITUA A FUNÇÃO ATUAL POR ESTA:
   useEffect(() => {
@@ -267,77 +254,38 @@ const ShipDashboard = ({ playerData, onLogout }) => {
     }
   }, [hitEvent]);
 
-  const shipInfo = getShipData(playerData.ship);
-  const [attributes, setAttributes] = useState(shipInfo.attributes);
-  const remainingPoints = calculateRemainingPoints(attributes, shipInfo.totalPoints);
+  const [attributes, setAttributes] = useState({});
+  
+  useEffect(() => {
+  let cancelled = false;
 
-  const playPowerDownSound = (isOutage = false) => {
-    const soundToPlay = isOutage ? powerDownOutage.current : powerDownGeneric.current;
-    if (!soundToPlay) return;
-    if (soundTimeout.current) clearTimeout(soundTimeout.current);
-    soundToPlay.currentTime = 0; soundToPlay.volume = 1.0; soundToPlay.playbackRate = 1.0;
-    soundToPlay.play().catch(() => {});
-    soundTimeout.current = setTimeout(() => { soundToPlay.pause(); }, isOutage ? 1500 : 500);
+  const loadShip = async () => {
+    const ship = await getShipData(playerData.ship);
+    if (!cancelled && ship) {
+      setShipDataState(ship);
+      setAttributes(ship.attributes || {});
+    }
   };
 
-  const [currentRole, setCurrentRole] = useState(playerData.role);
-/*
-  useEffect(() => {
-    const handleStorageChange = (e) => {
-      if (e.key === "last_combat_event" && e.newValue) {
-        const data = JSON.parse(e.newValue);
-        let overlayText = "", overlayType = "hit";
-        let extraTag = "", moduleMsg = "";
+  loadShip();
 
-        if (data.isRepair) {
-          overlayText = "reparo!"; overlayType = "miss";
-        } else if (data.isAbsorbed) {
-          overlayText = "absorvido!"; overlayType = "miss";
-        } else if (data.damage > 0) {
-          overlayText = `-${data.damage} HP`; overlayType = "hit";
-          if (data.logText) {
-            if (data.logText.includes("[MÓDULO:")) { const m = data.logText.match(/\[MÓDULO: (.*?)\]/); if (m) moduleMsg = m[1]; }
-            else if (data.logText.includes("[AVARIA:")) { const m = data.logText.match(/\[AVARIA: (.*?)\]/); if (m) moduleMsg = `${m[1]} AVARIADA`; }
-            else if (data.logText.includes("[MÓDULO DESTRUÍDO:")) { const m = data.logText.match(/\[MÓDULO DESTRUÍDO: (.*?)\]/); if (m) moduleMsg = `${m[1]} DESTRUÍDA`; }
-            else if (data.logText.includes("[ESCUDO: AVARIADOS]")) { moduleMsg = "⚡ ESCUDOS AVARIADOS"; }
-            else if (data.logText.includes("[ESCUDO: DESTRUÍDOS]")) { moduleMsg = "💀 ESCUDOS DESTRUÍDOS"; }
-            else if (data.logText.includes("[MOTORES: AVARIADOS]")) { moduleMsg = "⚙ MOTORES AVARIADOS"; }
-            else if (data.logText.includes("[MOTORES: DESTRUÍDOS]")) { moduleMsg = "💀 MOTORES DESTRUÍDOS"; }if (data.logText.includes("EXTREMO")) extraTag = "EXTREMO.";
-            else if (data.logText.includes("CRÍTICO")) extraTag = "CRÍTICO.";
-          }
-        } else {
-          overlayText = "falhou!"; overlayType = "miss";
-        }
-
-        setHitEvent({ text: overlayText, type: overlayType, id: data.timestamp, extraTag, moduleMsg });
-        setHeaderLog(data.logText);
-        setTimeout(() => setHitEvent(null), 4000);
-      }
-
-      if (e.key === "heavens_door_ships_db" && e.newValue) {
-        const allShips = JSON.parse(e.newValue);
-        setAllShipsList(Object.values(allShips));
-        const updatedShip = allShips[playerData.ship];
-        if (updatedShip) {
-          setAttributes(updatedShip.attributes);
-          setShipDataState(updatedShip);
-        }
-      }
-    };
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, [playerData.ship]);*/
+  return () => {
+    cancelled = true;
+  };
+}, [playerData.ship]);
 
   // Escutador em Tempo Real do Firebase
   useEffect(() => {
     // 1. Escuta as atualizações das Naves
     const unsubShips = onSnapshot(doc(db, "gameData", "ships"), (docSnap) => {
-      if (docSnap.exists()) {
-        const allShips = docSnap.data();
-        const shipsArray = Object.values(allShips);
-        setAllShipsList(shipsArray);
-        
-        const myShip = allShips[playerData.ship];
+  if (docSnap.exists()) {
+    const allShips = docSnap.data();
+    const shipsArray = Object.values(allShips);
+    setAllShipsList(shipsArray);
+
+    getProximityMatrix().then(setProximityMatrix);
+
+    const myShip = allShips[playerData.ship];
         if (myShip) {
           setShipDataState(myShip);
           setAttributes(myShip.attributes);
@@ -413,6 +361,23 @@ const ShipDashboard = ({ playerData, onLogout }) => {
     const interval = setInterval(checkRole, 3000);
     return () => clearInterval(interval);
   }, [currentRole, playerData.nickname]);
+
+  if (!shipDataState || Object.keys(attributes).length === 0) {
+  return <div className="dashboard">Carregando nave...</div>;
+}
+
+const shipInfo = shipDataState;
+  
+  const remainingPoints = calculateRemainingPoints(attributes, shipInfo.totalPoints);
+
+  const playPowerDownSound = (isOutage = false) => {
+    const soundToPlay = isOutage ? powerDownOutage.current : powerDownGeneric.current;
+    if (!soundToPlay) return;
+    if (soundTimeout.current) clearTimeout(soundTimeout.current);
+    soundToPlay.currentTime = 0; soundToPlay.volume = 1.0; soundToPlay.playbackRate = 1.0;
+    soundToPlay.play().catch(() => {});
+    soundTimeout.current = setTimeout(() => { soundToPlay.pause(); }, isOutage ? 1500 : 500);
+  };
 
   const handleManualSync = async () => {
     if (currentRole === "piloto" || currentRole === "copiloto") {
@@ -496,7 +461,7 @@ const ShipDashboard = ({ playerData, onLogout }) => {
     const isMissileAttack     = attackWeaponType === "missiles";
     await processPlayerAttack(playerData.ship, attackTarget, attackDamage, isExtremo, currentWeaponEffect, isMissileAttack);
 
-    const updatedShip = getShipData(playerData.ship);
+    const updatedShip = await getShipData(playerData.ship);
     setShipDataState(updatedShip);
 
     setShowAttackModal(false);
@@ -891,10 +856,11 @@ const ShipDashboard = ({ playerData, onLogout }) => {
               </div>
 
               {(() => {
-  if (!attackTarget) return null;
-  const tShip = allShipsList.find(s => s.id === attackTarget);
-  const prox  = tShip?.proximity;
-  if (prox === undefined || prox === null || !tShip?.isEnemy) return null;
+const tShip = allShipsList.find(s => s.id === attackTarget);
+if (!tShip?.isEnemy) return null;
+
+const proxKey = `${playerData.ship}__${tShip.id}`;
+const prox = proximityMatrix[proxKey] ?? 3;
   const { advantageBonus, precisionMultiplier, blocked } = getProximityModifiers(prox);
   if (blocked) return (
     <div className="attack-modal__prox-alert blocked">
@@ -966,9 +932,15 @@ const ShipDashboard = ({ playerData, onLogout }) => {
     (showDamageFields && !isExtremo && !attackDamage) || 
     isAimingWait || 
     // Lógica de Proximidade:
-    (allShipsList.find(s => s.id === attackTarget)?.isEnemy && 
-     (allShipsList.find(s => s.id === attackTarget)?.proximity ?? 3) >= 5)
-  }
+    (() => {
+  const target = allShipsList.find(s => s.id === attackTarget);
+  if (!target?.isEnemy) return false;
+
+  const proxKey = `${playerData.ship}__${target.id}`;
+  const prox = proximityMatrix[proxKey] ?? 3;
+
+  return prox >= 5;
+})()}
 >
   <span>
     {attackWeaponType === "missiles"

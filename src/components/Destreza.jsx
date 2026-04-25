@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { playersList } from "../utils/players";
 import { shipsList } from "../data/ships";
-import { getAllShips } from "../utils/mockApi";
+import { getAllShips, getAllCrewAssignments } from "../utils/mockApi";
 import "../styles/Destreza.css";
 
 const DexterityRanking = ({ onClose }) => {
@@ -10,6 +10,8 @@ const DexterityRanking = ({ onClose }) => {
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
+      const allAssignments = await getAllCrewAssignments();
+if (cancelled) return;
       const rawMappedData = playersList.map((player) => {
         const rawRole     = localStorage.getItem(`role_${player.id}`);
         const currentRole = (rawRole === "piloto" || rawRole === "copiloto") ? rawRole : "tripulante";
@@ -19,9 +21,8 @@ const DexterityRanking = ({ onClose }) => {
         let assignedFunction = "LIVRE";
         try {
           const crewKey = `crew_assignments_${savedShipId}`;
-          const crew = JSON.parse(
-            localStorage.getItem(crewKey) || '{"copiloto": null, "torretas": {}}'
-          );
+const crew = allAssignments[crewKey] || { copiloto: null, torretas: {} };
+
           if (currentRole === "piloto") {
             assignedFunction = "PILOTO";
           } else if (crew.copiloto === player.id) {

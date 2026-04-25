@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { playersList } from "../utils/players";
 import { shipsList } from "../data/ships";
 import "../styles/AdminDashboard.css";
@@ -17,7 +17,7 @@ import {
   enforceAttributeLimits, 
   repairShieldByAdmin, 
   repairEnginesByAdmin,
-  getAllCrewAssignments // <-- NOVA FUNÇÃO IMPORTADA
+  getAllCrewAssignments, getProximityMatrix // <-- NOVA FUNÇÃO IMPORTADA
 } from "../utils/mockApi";
 import TerminalCombate from "./TerminalCombate";
 import ConfirmModal from "./ConfirmModal";
@@ -38,7 +38,9 @@ const applySorting = (data, config) => {
   });
 };
 
+
 const AdminDashboard = ({ onLogout }) => {
+  const [proximityMatrix, setProximityMatrix] = useState({});
   const [usersData,   setUsersData]   = useState([]);
   const [sortConfig,  setSortConfig]  = useState({ key: "label", direction: "asc" });
   const [confirmState, setConfirmState] = useState({ isOpen: false });
@@ -115,7 +117,7 @@ const AdminDashboard = ({ onLogout }) => {
     loadFleet();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, selectedShipId]);
-  
+
   const handleSelectShip = (shipId, data = fleetData) => {
     setSelectedShipId(shipId);
     const ship = data[shipId];
@@ -184,8 +186,8 @@ const AdminDashboard = ({ onLogout }) => {
   // ────────────────────────────────────────────────────────────────────────────
 
   // 4. REFRESH DATA AGORA É ASYNC E LÊ TRIPULAÇÃO DA NUVEM
-  const refreshData = async () => { 
-    const allAssignments = await getAllCrewAssignments(); // FIREBASE
+const refreshData = useCallback(async () => {
+      const allAssignments = await getAllCrewAssignments(); // FIREBASE
 
     const rawMappedData = playersList.map((player) => {
       // Deixamos os status de login do player no localStorage por enquanto
@@ -214,6 +216,11 @@ const AdminDashboard = ({ onLogout }) => {
     });
 
     const dbShips = await getAllShips();
+const matrix = await getProximityMatrix();
+
+setFleetData(dbShips);
+setProximityMatrix(matrix);
+
     const enemyCrewMembers = [];
     Object.values(dbShips).forEach(ship => {
       if (ship.isEnemy && ship.status === "ativa" && ship.activeCrew) {
@@ -232,7 +239,7 @@ const AdminDashboard = ({ onLogout }) => {
     const combinedData = [...rawMappedData, ...enemyCrewMembers];
     const sortedData   = applySorting(combinedData, sortConfig);
     setUsersData(sortedData);
-  };
+  }, [sortConfig]);
 
   const handleSort = (key) => {
     let direction = "asc";
@@ -247,10 +254,10 @@ const AdminDashboard = ({ onLogout }) => {
   };
 
   useEffect(() => {
-    refreshData();
-    const interval = setInterval(refreshData, 3000);
-    return () => clearInterval(interval);
-  }, [sortConfig, refreshData]);
+  refreshData();
+  const interval = setInterval(refreshData, 3000);
+  return () => clearInterval(interval);
+}, [refreshData]);
 
   if (isCombatMode) return <TerminalCombate onBack={() => setIsCombatMode(false)} />;
 
@@ -647,12 +654,10 @@ const AdminDashboard = ({ onLogout }) => {
                       {/* --- COMPONENTE DA MATRIZ DE PROXIMIDADE ADICIONADO AQUI --- */}
               <div style={{ marginBottom: '2rem' }}>
                 <ProximityMatrixPanel 
-                  allShips={fleetData} 
-                  onUpdate={async () => {
-                    setFleetData(await getAllShips()); // ASYNC
-                    refreshData();
-                  }} 
-                />
+                    allShips={fleetData}
+                    proximityMatrix={proximityMatrix}
+                    onUpdate={refreshData}
+                  />
               </div>
                   </div>
 

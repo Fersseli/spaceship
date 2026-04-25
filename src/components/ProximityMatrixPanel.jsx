@@ -1,20 +1,25 @@
 import React from "react";
-import { getProximity, changeProximity } from "../utils/mockApi"; // Ajuste o caminho se necessário
+import { changeProximity } from "../utils/mockApi";
 
-const ProximityMatrixPanel = ({ allShips, onUpdate }) => {
-  const allies  = Object.values(allShips).filter(s => !s.isEnemy);
-  const enemies = Object.values(allShips).filter(s => s.isEnemy && s.status === "ativa");
+const ProximityMatrixPanel = ({ allShips, proximityMatrix = {}, onUpdate }) => {
+  const allies = Object.values(allShips).filter((s) => !s.isEnemy);
+  const enemies = Object.values(allShips).filter(
+    (s) => s.isEnemy && s.status === "ativa"
+  );
 
   if (allies.length === 0 || enemies.length === 0) return null;
 
-  const handleChange = (aliadoId, inimigoId, delta) => {
-    changeProximity(aliadoId, inimigoId, delta);
-    // dispara storage event para todos os componentes reagirem
-    window.dispatchEvent(new StorageEvent('storage', {
-      key: 'heavens_door_proximity_matrix',
-      newValue: localStorage.getItem('heavens_door_proximity_matrix'),
-    }));
-    if (onUpdate) onUpdate();
+  const getProxFromMatrix = (aliadoId, inimigoId) => {
+    const key = `${aliadoId}__${inimigoId}`;
+    return proximityMatrix[key] !== undefined ? proximityMatrix[key] : 3;
+  };
+
+  const handleChange = async (aliadoId, inimigoId, delta) => {
+    await changeProximity(aliadoId, inimigoId, delta);
+
+    if (onUpdate) {
+      await onUpdate();
+    }
   };
 
   const proxColor = (p) => {
@@ -25,27 +30,37 @@ const ProximityMatrixPanel = ({ allShips, onUpdate }) => {
     return "#6b7a8d";
   };
 
-  const proxLabel = (p) => ["","CONTATO","PERTO","MÉDIO","LONGE","LIMITE"][p] ?? "—";
+  const proxLabel = (p) =>
+    ["", "CONTATO", "PERTO", "MÉDIO", "LONGE", "LIMITE"][p] ?? "—";
 
   return (
     <div className="tc-prox-matrix-panel">
       <div className="tc-prox-matrix-title">// MATRIZ DE PROXIMIDADE</div>
-<div className="tc-prox-matrix-grid" style={{ gridTemplateColumns: `max-content repeat(${enemies.length}, 1fr)` }}>        {/* Cabeçalho: nomes dos inimigos */}
+
+      <div
+        className="tc-prox-matrix-grid"
+        style={{
+          gridTemplateColumns: `max-content repeat(${enemies.length}, 1fr)`,
+        }}
+      >
         <div className="tc-prox-cell tc-prox-header-corner" />
-        {enemies.map(e => (
-          <div key={e.id} className="tc-prox-cell tc-prox-header-enemy">
-            {e.name.split(" ")[0].toUpperCase()}
+
+        {enemies.map((enemy) => (
+          <div key={enemy.id} className="tc-prox-cell tc-prox-header-enemy">
+            {enemy.name.split(" ")[0].toUpperCase()}
           </div>
         ))}
-        {/* Linhas: cada aliado */}
-        {allies.map(ally => (
+
+        {allies.map((ally) => (
           <React.Fragment key={ally.id}>
             <div className="tc-prox-cell tc-prox-header-ally">
               {ally.name.split(" ")[0].toUpperCase()}
             </div>
-            {enemies.map(enemy => {
-              const p = getProximity(ally.id, enemy.id);
-              const c = proxColor(p);
+
+            {enemies.map((enemy) => {
+              const p = getProxFromMatrix(ally.id, enemy.id);
+              const color = proxColor(p);
+
               return (
                 <div key={enemy.id} className="tc-prox-cell tc-prox-value">
                   <button
@@ -53,20 +68,26 @@ const ProximityMatrixPanel = ({ allShips, onUpdate }) => {
                     onClick={() => handleChange(ally.id, enemy.id, +1)}
                     disabled={p >= 5}
                     title="Afastar"
-                  >▶</button>
+                  >
+                    ▶
+                  </button>
+
                   <span
                     className="tc-prox-number"
-                    style={{ color: c, borderColor: c }}
+                    style={{ color, borderColor: color }}
                     title={proxLabel(p)}
                   >
                     P{p}
                   </span>
+
                   <button
                     className="tc-prox-btn tc-prox-btn--plus"
                     onClick={() => handleChange(ally.id, enemy.id, -1)}
                     disabled={p <= 1}
                     title="Aproximar"
-                  >◀</button>
+                  >
+                    ◀
+                  </button>
                 </div>
               );
             })}
