@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
+import { db } from "../utils/firebase"; // <-- IMPORTANTE
+import { doc, setDoc } from "firebase/firestore"; // <-- IMPORTANTE
 import {
   getAllShips,
   updateShipConfig,
@@ -13,8 +15,7 @@ import {
   getShipMaxAttributes,
   enforceAttributeLimits,
   getProximityModifiers,
-  getProximity,
-  changeProximity,
+  getProximityMatrix, // <-- IMPORTANTE ADICIONAR ESTA
   resolveEngagement,
   ensureNavigationFields,
 } from "../utils/mockApi";
@@ -82,16 +83,12 @@ const CrewSlot = ({ member, attackerShip, allShips, onFire }) => {
   // O atacante é inimigo → procuramos a menor proximidade com qualquer aliado
   // (ou usamos o targetId selecionado para pegar a prox específica)
   const getProxForTarget = (tId) => {
-    // Se o alvo é aliado, pegamos getProximity(tId, attackerShip.id)
-    // Se o alvo é inimigo, getProximity(attackerShip.id, tId)
-    const ships = allShips;
-    const target = ships[tId];
+    const target = allShips[tId];
     if (!target) return 3;
     if (!target.isEnemy) {
-      // atacante inimigo → alvo aliado: prox = getProximity(aliadoId, inimigoId)
-      return getProximity(tId, attackerShip.id);
+      const key = `${tId}__${attackerShip.id}`;
+      return proxMatrix[key] !== undefined ? proxMatrix[key] : 3;
     }
-    // atacante inimigo → alvo inimigo (fogo amigo, raro)
     return 3;
   };
 
@@ -111,16 +108,16 @@ const CrewSlot = ({ member, attackerShip, allShips, onFire }) => {
     setTargetId("");
   };
 
-  const handleCancelBallistic = () => {
+  const handleCancelBallistic = async () => {
     setOpen(false);
     setTargetId("");
-    const ships = getAllShips();
+    const ships = await getAllShips();
     const ship  = ships[attackerShip.id];
     const crewMember = ship?.activeCrew?.find(m => m.id === member.id);
     if (crewMember) {
       crewMember.ballisticTarget    = null;
       crewMember.ballisticLockLevel = 0;
-      localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
+      await setDoc(doc(db, "gameData", "ships"), ships); // <-- FIREBASE
     }
   };
 
@@ -228,8 +225,8 @@ const CrewSlot = ({ member, attackerShip, allShips, onFire }) => {
           >
             <option value="">— Selecionar Alvo —</option>
             {targetOptions.map((s) => {
-              // Para opções aliadas, mostrar proximidade do alvo em relação ao atacante
-              const tProx = s.isEnemy ? 3 : getProximity(s.id, attackerShip.id);
+              const pxKey = `${s.id}__${attackerShip.id}`;
+              const tProx = s.isEnemy ? 3 : (proxMatrix[pxKey] !== undefined ? proxMatrix[pxKey] : 3);
               const tBlocked = !s.isEnemy && getProximityModifiers(tProx).blocked;
               return (
                 <option key={s.id} value={s.id} disabled={tBlocked}>
@@ -244,18 +241,18 @@ const CrewSlot = ({ member, attackerShip, allShips, onFire }) => {
           <div className="tc-fire-row">
             <button
               className="tc-cancel-btn"
-              onClick={() => {
+              onClick={async () => {
                 setOpen(false);
                 setTargetId("");
                 if (member.missileTarget) {
-                  const ships = getAllShips();
+                  const ships = await getAllShips();
                   const ship  = ships[attackerShip.id];
                   const crewMember = ship?.activeCrew?.find(m => m.id === member.id);
                   if (crewMember) {
                     crewMember.missileTarget    = null;
                     crewMember.missileLockLevel = 0;
                     crewMember.missileReady     = false;
-                    localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
+                    await setDoc(doc(db, "gameData", "ships"), ships); // <-- FIREBASE
                   }
                 }
                 if (member.ballisticTarget) handleCancelBallistic();
@@ -263,6 +260,7 @@ const CrewSlot = ({ member, attackerShip, allShips, onFire }) => {
             >
               ✕
             </button>
+            
             <button
               className={`tc-fire-btn ${usesBallistic && isBallisticAiming && ballisticLockLevel >= 1 ? 'tc-fire-btn--ballistic-lock' : ''} ${proxMods.blocked ? 'tc-fire-btn--blocked' : ''}`}
               disabled={isFireDisabled()}
@@ -288,7 +286,7 @@ const CrewSlot = ({ member, attackerShip, allShips, onFire }) => {
 const ShipAttributeAdjuster = ({ ship, onUpdate }) => {
   const maxAttrs = getShipMaxAttributes(ship);
 
-  const handleLevelChange = (attr, delta) => {
+  const handleLevelChange = async (attr, delta) => {
     const currentAttrs = { ...ship.attributes };
     const currentTotal = Object.values(currentAttrs).reduce((sum, v) => sum + v, 0);
     const currentValue = currentAttrs[attr] || 0;
@@ -300,7 +298,7 @@ const ShipAttributeAdjuster = ({ ship, onUpdate }) => {
     if (currentValue + delta > maxAllowed) return;
 
     const newAttrs = { ...currentAttrs, [attr]: currentValue + delta };
-    updateShipConfig(ship.id, { attributes: newAttrs });
+    await updateShipConfig(ship.id, { attributes: newAttrs }); // <-- AWAIT AQUI
     onUpdate();
   };
 
@@ -339,10 +337,15 @@ const TacticalCard = ({ ship, allShips, onFire, onUpdate }) => {
   // Para o card tático (inimigos), mostramos a proximidade mínima
   // com qualquer aliado (pior caso para o inimigo = mais próximo)
   const allies = Object.values(allShips).filter(s => !s.isEnemy);
-  const proxPerAlly = allies.map(a => ({
-    aliadoName: a.name.split(" ")[0],
-    prox: getProximity(a.id, ship.id),
-  }));
+  const proxPerAlly = allies.map(a => {
+    // Busca direto no state em vez de usar getProximity
+    const key = `${a.id}__${ship.id}`;
+    const px = proxMatrix[key] !== undefined ? proxMatrix[key] : 3;
+    return {
+      aliadoName: a.name.split(" ")[0],
+      prox: px,
+    };
+  });
   const minProx = proxPerAlly.length > 0 ? Math.min(...proxPerAlly.map(x => x.prox)) : 3;
 
   const proxColor =
@@ -442,6 +445,7 @@ const TacticalCard = ({ ship, allShips, onFire, onUpdate }) => {
               member={member}
               attackerShip={ship}
               allShips={allShips}
+              proxMatrix={proxMatrix} // <-- PASSE A MATRIZ
               onFire={onFire}
             />
           ))
@@ -476,8 +480,9 @@ const TerminalCombate = ({ onBack }) => {
   const [activeEnemies, setActiveEnemies] = useState([]);
   const [combatLog,     setCombatLog]     = useState([]);
   const [lastRefresh,   setLastRefresh]   = useState(new Date());
+  
+  const [proxMatrix,    setProxMatrix]    = useState({}); // <-- NOVO ESTADO
 
-  // Seletor de nave aliada para o radar do Terminal
   const [selectedAllyId, setSelectedAllyId] = useState("");
 
   const turnSound         = useRef(new Audio('/passarturno.wav'));
@@ -485,13 +490,16 @@ const TerminalCombate = ({ onBack }) => {
   const [modalConfig, setModalConfig] = useState({ isOpen: false });
   const closeConfirm = () => setModalConfig(prev => ({ ...prev, isOpen: false }));
 
-  const refresh = () => {
-    const ships = getAllShips();
+  // REFRESH AGORA É ASYNC E PUXA A MATRIZ
+  const refresh = async () => {
+    const ships = await getAllShips();
+    const matrix = await getProximityMatrix();
     setAllShips(ships);
+    setProxMatrix(matrix);
     setActiveEnemies(Object.values(ships).filter((s) => s.isEnemy && s.status === "ativa"));
     setLastRefresh(new Date());
   };
-
+  
   // Naves aliadas disponíveis para perspectiva do radar
   const alliedShips = Object.values(allShips).filter(
     s => !s.isEnemy && s.status !== "destruida" && Object.keys(s.attributes || {}).length > 0
@@ -522,8 +530,10 @@ const TerminalCombate = ({ onBack }) => {
 
   // ── Motor de Resolução ────────────────────────────────────────────────────
 
-  const handleFire = (member, attackerShip, targetId, missiles) => {
-    const ships  = getAllShips();
+  // ── Motor de Resolução (AGORA ASYNC PARA O FIREBASE) ────────────────────
+  const handleFire = async (member, attackerShip, targetId, missiles) => {
+    // 1. Puxa as naves do banco com await
+    const ships  = await getAllShips();
     const target = ships[targetId];
 
     if (!target.shieldStatus)  target.shieldStatus  = 'operacional';
@@ -533,13 +543,12 @@ const TerminalCombate = ({ onBack }) => {
 
     const attackerCrewMember = ships[attackerShip.id].activeCrew.find(m => m.id === member.id);
 
-    // ── Proximidade: atacante (inimigo) → alvo ────────────────────────────────
-    // Se o alvo é aliado: prox = getProximity(aliadoId, inimigoId)
+    // ── Proximidade ────────────────────────────────
     const targetShipData = ships[targetId];
     let proximity = 3;
     if (!targetShipData.isEnemy) {
-      // atacante é inimigo, alvo é aliado
-      proximity = getProximity(targetId, attackerShip.id);
+      // 2. Chama a matriz do Firebase com await
+      proximity = await getProximity(targetId, attackerShip.id);
     }
     const proxMods = getProximityModifiers(proximity, attackerShip.isDerrapando);
 
@@ -559,7 +568,10 @@ const TerminalCombate = ({ onBack }) => {
           attackerCrewMember.missileTarget    = targetId;
           attackerCrewMember.missileReady     = false;
           attackerCrewMember.missileLockLevel = 0;
-          localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
+          
+          // 3. Salva no Firebase no lugar do localStorage
+          await setDoc(doc(db, "gameData", "ships"), ships);
+          
           addLog({ hit: false, text: `⚠️ ${attackerShip.name} iniciou travamento de mira de MÍSSIL em ${target.name}!` });
           refresh();
           return;
@@ -577,7 +589,10 @@ const TerminalCombate = ({ onBack }) => {
       if (!attackerCrewMember.ballisticTarget) {
         attackerCrewMember.ballisticTarget    = targetId;
         attackerCrewMember.ballisticLockLevel = 0;
-        localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
+        
+        // 4. Salva no Firebase
+        await setDoc(doc(db, "gameData", "ships"), ships);
+        
         addLog({ hit: false, text: `🎯 ${attackerShip.name} - ${member.function} iniciou mira balística em ${target.name}!` });
         refresh();
         return;
@@ -585,7 +600,10 @@ const TerminalCombate = ({ onBack }) => {
       if (attackerCrewMember.ballisticTarget !== targetId) {
         attackerCrewMember.ballisticTarget    = targetId;
         attackerCrewMember.ballisticLockLevel = 0;
-        localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
+        
+        // 5. Salva no Firebase
+        await setDoc(doc(db, "gameData", "ships"), ships);
+        
         addLog({ hit: false, text: `🎯 ${attackerShip.name} - ${member.function} redirecionou mira balística para ${target.name}!` });
         refresh();
         return;
@@ -630,9 +648,10 @@ const TerminalCombate = ({ onBack }) => {
         `| ERROU O ALVO`
       ].join("  ");
 
-      localStorage.setItem("last_combat_event", JSON.stringify({
+      // 6. Registra o evento de erro no Firebase
+      await setDoc(doc(db, "gameData", "lastCombatEvent"), {
         targetName: target.name, damage: 0, isAbsorbed: false, timestamp: Date.now(), logText: msgFalha
-      }));
+      });
       addLog({ hit: false, text: msgFalha });
 
       if (missiles) {
@@ -640,11 +659,11 @@ const TerminalCombate = ({ onBack }) => {
         attackerCrewMember.missileTarget    = null;
         attackerCrewMember.missileReady     = false;
         ships[attackerShip.id].missileCooldown = 2;
-        localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
+        await setDoc(doc(db, "gameData", "ships"), ships); // Firebase
       } else if (hasBallistic) {
         attackerCrewMember.ballisticLockLevel = 0;
         attackerCrewMember.ballisticTarget    = null;
-        localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
+        await setDoc(doc(db, "gameData", "ships"), ships); // Firebase
       }
       return;
     }
@@ -654,17 +673,18 @@ const TerminalCombate = ({ onBack }) => {
     const finalDamage = Math.max(0, rawDamage - shieldValue);
 
     const newHP = Math.max(0, target.currentHP - finalDamage);
-    updateShipConfig(targetId, { currentHP: newHP });
-    window.dispatchEvent(new StorageEvent('storage', {
-      key: 'heavens_door_ships_db',
-      newValue: JSON.stringify(getAllShips())
-    }));
+    
+    // 7. Atualiza o HP no Firebase (AWAIT)
+    await updateShipConfig(targetId, { currentHP: newHP });
+    
+    // Removido o window.dispatchEvent(StorageEvent) pois o Firebase já cuida do sync de dados
 
     if (newHP <= 0 && target.status !== "destruida") {
-      setTimeout(() => {
-        const currentShips = getAllShips();
+      // 8. O callback do setTimeout agora é async
+      setTimeout(async () => {
+        const currentShips = await getAllShips();
         if (currentShips[targetId] && currentShips[targetId].currentHP <= 0) {
-          updateShipConfig(targetId, { status: "destruida", activeCrew: [] });
+          await updateShipConfig(targetId, { status: "destruida", activeCrew: [] });
           refresh();
         }
       }, 4000);
@@ -680,7 +700,8 @@ const TerminalCombate = ({ onBack }) => {
     let isEnginesHit = false;
 
     if ((isCritico || isExtremo) && finalDamage > 0) {
-      const freshShips  = getAllShips();
+      // 9. Puxa os dados frescos do banco para aplicar avarias críticas
+      const freshShips  = await getAllShips();
       const freshTarget = freshShips[targetId];
       if (!freshTarget.shieldStatus)  freshTarget.shieldStatus  = 'operacional';
       if (!freshTarget.enginesStatus) freshTarget.enginesStatus = 'operacional';
@@ -727,7 +748,9 @@ const TerminalCombate = ({ onBack }) => {
 
         if (freshTarget.attributes) enforceAttributeLimits(freshTarget);
         freshShips[targetId] = freshTarget;
-        localStorage.setItem("heavens_door_ships_db", JSON.stringify(freshShips));
+        
+        // 10. Salva o dano de módulo no Firebase
+        await setDoc(doc(db, "gameData", "ships"), freshShips);
       }
     }
 
@@ -749,7 +772,8 @@ const TerminalCombate = ({ onBack }) => {
       ...(moduleTag ? [moduleTag] : []),
     ].join("  ");
 
-    localStorage.setItem("last_combat_event", JSON.stringify({
+    // 11. Registra o evento de dano final no log global do Firebase
+    await setDoc(doc(db, "gameData", "lastCombatEvent"), {
       targetName: target.name, damage: finalDamage,
       isAbsorbed: rawDamage > 0 && finalDamage === 0,
       timestamp: Date.now(), logText: msg,
@@ -757,11 +781,12 @@ const TerminalCombate = ({ onBack }) => {
       shieldDestroyed: moduleTag.includes("DESTRUÍDOS") && isShieldHit,
       enginesHit: isEnginesHit,
       enginesDestroyed: moduleTag.includes("DESTRUÍDOS") && isEnginesHit,
-    }));
+    });
 
     addLog({ hit: true, text: msg, isShield: isShieldHit, isEngines: isEnginesHit });
 
-    const finalShips = getAllShips();
+    // 12. Limpeza de travamento de armas
+    const finalShips = await getAllShips();
     const finalAttackerCrew = finalShips[attackerShip.id].activeCrew.find(m => m.id === member.id);
 
     if (missiles) {
@@ -769,11 +794,11 @@ const TerminalCombate = ({ onBack }) => {
       finalAttackerCrew.missileTarget       = null;
       finalAttackerCrew.missileReady        = false;
       finalShips[attackerShip.id].missileCooldown = 2;
-      localStorage.setItem("heavens_door_ships_db", JSON.stringify(finalShips));
+      await setDoc(doc(db, "gameData", "ships"), finalShips); // Firebase
     } else if (hasBallistic) {
       finalAttackerCrew.ballisticLockLevel = 0;
       finalAttackerCrew.ballisticTarget    = null;
-      localStorage.setItem("heavens_door_ships_db", JSON.stringify(finalShips));
+      await setDoc(doc(db, "gameData", "ships"), finalShips); // Firebase
     }
 
     refresh();
@@ -789,7 +814,7 @@ const TerminalCombate = ({ onBack }) => {
   const totalCrew = activeEnemies.reduce((sum, s) => sum + (s.activeCrew?.length || 0), 0);
   const timeStr   = lastRefresh.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
-  const handleConfirmTurn = () => {
+  const handleConfirmTurn = async () => {
     setModalConfig(prev => ({ ...prev, isOpen: false }));
 
     if (turnSound.current) {
@@ -797,20 +822,21 @@ const TerminalCombate = ({ onBack }) => {
       turnSound.current.play().catch(e => console.warn("Áudio bloqueado:", e));
     }
 
-    const ships = getAllShips();
+    const ships = await getAllShips(); // <-- AWAIT AQUI
     let alertas = [];
 
-    Object.values(ships).forEach(ship => {
+    // Precisamos do for...of porque os incrementos agora são async
+    for (const ship of Object.values(ships)) {
       if (ship.status === 'ativa' || !ship.isEnemy) {
-        const alertasMissile = incrementMissileLock(ship.id);
+        const alertasMissile = await incrementMissileLock(ship.id);
         if (alertasMissile?.length) alertas.push(...alertasMissile);
 
-        const alertasBallistic = incrementBallisticLock(ship.id);
+        const alertasBallistic = await incrementBallisticLock(ship.id);
         if (alertasBallistic?.length) alertas.push(...alertasBallistic);
       }
-    });
+    }
 
-    const reparos = processGlobalTurn();
+    const reparos = await processGlobalTurn(); // <-- AWAIT AQUI
     if (reparos.length > 0) {
       reparos.forEach(msg => addLog({ hit: false, text: `🔧 ${msg}` }));
       const fullMsg = `🔧 ` + reparos.join(" | 🔧 ");
@@ -818,8 +844,8 @@ const TerminalCombate = ({ onBack }) => {
         targetName: "Sistema", damage: 0, isAbsorbed: false, isRepair: true,
         timestamp: Date.now(), logText: fullMsg
       };
-      localStorage.setItem("last_combat_event", JSON.stringify(repairEvent));
-      window.dispatchEvent(new CustomEvent("combat:event", { detail: repairEvent }));
+      // <-- FIREBASE AQUI NO LUGAR DO LOCALSTORAGE
+      await setDoc(doc(db, "gameData", "lastCombatEvent"), repairEvent);
     }
 
     refresh();
@@ -860,8 +886,8 @@ const TerminalCombate = ({ onBack }) => {
           <button
             className="tc-fire-btn"
             style={{ background: '#ffae00', color: '#000', width: 'auto', padding: '0.5rem 1rem' }}
-            onClick={() => {
-              const ships   = getAllShips();
+            onClick={async () => {
+              const ships   = await getAllShips(); // <-- ASYNC/AWAIT ADICIONADOS
               let bloqueios = [];
               Object.values(ships).forEach(s => {
                 if (s.activeCrew) {
@@ -938,6 +964,7 @@ const TerminalCombate = ({ onBack }) => {
                 key={ship.id}
                 ship={ship}
                 allShips={allShips}
+                proxMatrix={proxMatrix} // <-- PASSE A MATRIZ AQUI
                 onFire={handleFire}
                 onUpdate={refresh}
               />

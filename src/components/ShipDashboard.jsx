@@ -10,6 +10,9 @@ import DexterityRanking from "./Destreza";
 import { getShipData, updateShipAttributes, getAllShips, processPlayerAttack, updateShipConfig, getShipMaxAttributes } from "../utils/mockApi";
 import ConfirmModal from "./ConfirmModal";
 import RadarTatico from "./RadarTatico";
+import { db } from "../utils/firebase";
+import { doc, onSnapshot } from "firebase/firestore";
+import { getDoc, setDoc } from "firebase/firestore";
 
 const ShipDashboard = ({ playerData, onLogout }) => {
 
@@ -50,6 +53,8 @@ const ShipDashboard = ({ playerData, onLogout }) => {
   const backSound        = useRef(new Audio('/backb.mp3'));
   const failSound        = useRef(new Audio('/failship.wav'));
   const sonarSound       = useRef(new Audio('/sonar.mp3')); // <--- ADICIONE ESTA LINHA
+  const mountTime = useRef(Date.now()); 
+  const prevEnemiesRef = useRef([]);
 
   const playFailSound = () => {
     if (failSound.current) {
@@ -95,7 +100,7 @@ const ShipDashboard = ({ playerData, onLogout }) => {
     }
   }, [currentlyTargeted]);
 
-  useEffect(() => {
+ /* useEffect(() => {
     const handleSonarEvent = (e) => {
       // Se a chave "enemy_activated_event" foi alterada no localStorage, toca o som
       if (e.key === "enemy_activated_event" && e.newValue) {
@@ -110,7 +115,7 @@ const ShipDashboard = ({ playerData, onLogout }) => {
     window.addEventListener('storage', handleSonarEvent);
     return () => window.removeEventListener('storage', handleSonarEvent);
   }, []);
-
+*/
   const playPowerUpSound = (startLevel, endLevel) => {
     if (!rechargeSound.current) return;
     if (soundTimeout.current) clearTimeout(soundTimeout.current);
@@ -129,7 +134,7 @@ const ShipDashboard = ({ playerData, onLogout }) => {
       rechargeSound.current.playbackRate = 1.0;
     }, desiredDurationMs);
   };
-
+/*
   useEffect(() => {
     setAllShipsList(Object.values(getAllShips()));
     const initialLog = JSON.parse(localStorage.getItem("combat_journal") || "[]");
@@ -153,22 +158,28 @@ const ShipDashboard = ({ playerData, onLogout }) => {
     };
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
-  }, [playerData.ship]);
+  }, [playerData.ship]);*/
 
+  // SUBSTITUA A FUNÇÃO ATUAL POR ESTA:
   useEffect(() => {
     document.body.style.cursor = "url('/normal.cur'), auto";
     localStorage.setItem(`status_${playerData.nickname}`, "online");
     localStorage.setItem(`role_${playerData.nickname}`, playerData.role);
     localStorage.setItem(`ship_${playerData.nickname}`, playerData.ship);
-    removePlayerFromAllCrews(playerData.nickname);
+    
+    const clearCrews = async () => {
+      await removePlayerFromAllCrews(playerData.nickname);
+    };
+    clearCrews();
+
     return () => {
       document.body.style.cursor = "default";
       localStorage.removeItem(`status_${playerData.nickname}`);
       localStorage.removeItem(`role_${playerData.nickname}`);
-      removePlayerFromAllCrews(playerData.nickname);
+      clearCrews();
     };
   }, [playerData]);
-
+/*
   useEffect(() => {
     const handler = (e) => {
       const data = e.detail;
@@ -227,7 +238,7 @@ const ShipDashboard = ({ playerData, onLogout }) => {
 
     window.addEventListener("combat:event", handler);
     return () => window.removeEventListener("combat:event", handler);
-  }, []);
+  }, []);*/
 
   useEffect(() => {
     if (hitEvent) {
@@ -272,7 +283,7 @@ const ShipDashboard = ({ playerData, onLogout }) => {
   };
 
   const [currentRole, setCurrentRole] = useState(playerData.role);
-
+/*
   useEffect(() => {
     const handleStorageChange = (e) => {
       if (e.key === "last_combat_event" && e.newValue) {
@@ -317,6 +328,83 @@ const ShipDashboard = ({ playerData, onLogout }) => {
     };
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
+  }, [playerData.ship]);*/
+
+  // Escutador em Tempo Real do Firebase
+  useEffect(() => {
+    // 1. Escuta as atualizações das Naves
+    const unsubShips = onSnapshot(doc(db, "gameData", "ships"), (docSnap) => {
+      if (docSnap.exists()) {
+        const allShips = docSnap.data();
+        const shipsArray = Object.values(allShips);
+        setAllShipsList(shipsArray);
+        
+        const myShip = allShips[playerData.ship];
+        if (myShip) {
+          setShipDataState(myShip);
+          setAttributes(myShip.attributes);
+        }
+
+        // Lógica do Sonar (Inimigo Ativado)
+        const currentEnemies = shipsArray.filter(s => s.isEnemy && s.status === "ativa").map(s => s.id);
+        const newActivations = currentEnemies.filter(id => !prevEnemiesRef.current.includes(id));
+        
+        if (newActivations.length > 0 && prevEnemiesRef.current.length > 0) {
+          if (sonarSound.current) {
+            sonarSound.current.currentTime = 0;
+            sonarSound.current.volume = 1.0;
+            sonarSound.current.play().catch(() => {});
+          }
+        }
+        prevEnemiesRef.current = currentEnemies;
+      }
+    });
+
+    // 2. Escuta os Tiros e Danos
+    const unsubCombat = onSnapshot(doc(db, "gameData", "lastCombatEvent"), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        
+        // Só processa se for um tiro NOVO (depois que o jogador logou)
+        if (data.timestamp > mountTime.current) {
+          mountTime.current = data.timestamp;
+
+          let overlayText = "", overlayType = "hit";
+          let extraTag = "", moduleMsg = "";
+
+          if (data.isRepair) {
+            overlayText = "reparo!"; overlayType = "miss";
+          } else if (data.isAbsorbed) {
+            overlayText = "absorvido!"; overlayType = "miss";
+          } else if (data.damage > 0) {
+            overlayText = `-${data.damage} HP`; overlayType = "hit";
+            if (data.logText) {
+              if (data.logText.includes("[MÓDULO:")) { const m = data.logText.match(/\[MÓDULO: (.*?)\]/); if (m) moduleMsg = m[1]; }
+              else if (data.logText.includes("[AVARIA:")) { const m = data.logText.match(/\[AVARIA: (.*?)\]/); if (m) moduleMsg = `${m[1]} AVARIADA`; }
+              else if (data.logText.includes("[MÓDULO DESTRUÍDO:")) { const m = data.logText.match(/\[MÓDULO DESTRUÍDO: (.*?)\]/); if (m) moduleMsg = `${m[1]} DESTRUÍDA`; }
+              else if (data.logText.includes("[ESCUDO: AVARIADOS]")) { moduleMsg = "⚡ ESCUDOS AVARIADOS"; }
+              else if (data.logText.includes("[ESCUDO: DESTRUÍDOS]")) { moduleMsg = "💀 ESCUDOS DESTRUÍDOS"; }
+              else if (data.logText.includes("[MOTORES: AVARIADOS]")) { moduleMsg = "⚙ MOTORES AVARIADOS"; }
+              else if (data.logText.includes("[MOTORES: DESTRUÍDOS]")) { moduleMsg = "💀 MOTORES DESTRUÍDOS"; }
+              
+              if (data.logText.includes("EXTREMO")) extraTag = "EXTREMO.";
+              else if (data.logText.includes("CRÍTICO")) extraTag = "CRÍTICO.";
+            }
+          } else {
+            overlayText = "falhou!"; overlayType = "miss";
+          }
+
+          setHitEvent({ text: overlayText, type: overlayType, id: data.timestamp, extraTag, moduleMsg });
+          setHeaderLog(data.logText);
+          setTimeout(() => setHitEvent(null), 4000);
+        }
+      }
+    });
+
+    return () => {
+      unsubShips();
+      unsubCombat();
+    };
   }, [playerData.ship]);
 
   useEffect(() => {
@@ -328,9 +416,9 @@ const ShipDashboard = ({ playerData, onLogout }) => {
     return () => clearInterval(interval);
   }, [currentRole, playerData.nickname]);
 
-  const handleManualSync = () => {
+  const handleManualSync = async () => {
     if (currentRole === "piloto" || currentRole === "copiloto") {
-      updateShipAttributes(playerData.ship, attributes);
+      await updateShipAttributes(playerData.ship, attributes);
       if (confirmSound.current) {
         confirmSound.current.currentTime = 0;
         confirmSound.current.volume = 1.0;
@@ -349,7 +437,7 @@ const ShipDashboard = ({ playerData, onLogout }) => {
     setAttributes({ ...attributes, [attributeName]: attributes[attributeName] - 1 });
   };
 
-  const handleConfirmAttack = () => {
+  const handleConfirmAttack =  async () => {
     if (!attackTarget) return;
 
     if (attackWeaponType === "missiles" && shipInfo.missileCooldown > 0) {
@@ -362,7 +450,7 @@ const ShipDashboard = ({ playerData, onLogout }) => {
     }
 
     if (attackWeaponType === "missiles" && shipInfo.shipClass !== "type_II") {
-      const currentShips = getAllShips();
+      const currentShips = await getAllShips();
       const myShip = currentShips[playerData.ship];
 
       if (myShip && myShip.activeCrew) {
@@ -381,8 +469,7 @@ const ShipDashboard = ({ playerData, onLogout }) => {
           centerTurret.missileTarget    = attackTarget;
           centerTurret.missileReady     = false;
           centerTurret.missileLockLevel = 0;
-          updateShipConfig(playerData.ship, { activeCrew: myShip.activeCrew });
-          window.dispatchEvent(new StorageEvent('storage', { key: 'heavens_door_ships_db', newValue: JSON.stringify(getAllShips()) }));
+          await updateShipConfig(playerData.ship, { activeCrew: myShip.activeCrew });
           setShowAttackModal(false);
           showConfirm({
             title: "MIRA INICIADA",
@@ -402,15 +489,14 @@ const ShipDashboard = ({ playerData, onLogout }) => {
           centerTurret.missileTarget    = null;
           centerTurret.missileReady     = false;
           centerTurret.missileLockLevel = 0;
-          updateShipConfig(playerData.ship, { activeCrew: myShip.activeCrew, missileCooldown: 2 });
+          await updateShipConfig(playerData.ship, { activeCrew: myShip.activeCrew, missileCooldown: 2 });
         }
       }
     }
 
     const currentWeaponEffect = getEffect(shipInfo.shipClass, attackWeaponType, attributes[attackWeaponType]);
     const isMissileAttack     = attackWeaponType === "missiles";
-
-    processPlayerAttack(playerData.ship, attackTarget, attackDamage, isExtremo, currentWeaponEffect, isMissileAttack);
+    await processPlayerAttack(playerData.ship, attackTarget, attackDamage, isExtremo, currentWeaponEffect, isMissileAttack);
 
     const updatedShip = getShipData(playerData.ship);
     setShipDataState(updatedShip);
@@ -421,8 +507,9 @@ const ShipDashboard = ({ playerData, onLogout }) => {
     setIsExtremo(false);
   };
 
-  const handleCancelMissileLock = () => {
-    const currentShips = getAllShips();
+  // ADICIONE ASYNC E AWAIT NAS NAVES E NA ATUALIZAÇÃO
+  const handleCancelMissileLock = async () => {
+    const currentShips = await getAllShips();
     const myShip = currentShips[playerData.ship];
     if (myShip && myShip.activeCrew) {
       const turret = myShip.activeCrew.find(m => m.function.includes("CENTRO"));
@@ -430,8 +517,7 @@ const ShipDashboard = ({ playerData, onLogout }) => {
         turret.missileTarget    = null;
         turret.missileReady     = false;
         turret.missileLockLevel = 0;
-        updateShipConfig(playerData.ship, { activeCrew: myShip.activeCrew });
-        window.dispatchEvent(new StorageEvent('storage', { key: 'heavens_door_ships_db', newValue: JSON.stringify(getAllShips()) }));
+        await updateShipConfig(playerData.ship, { activeCrew: myShip.activeCrew });
         setShowAttackModal(false);
         setAttackTarget("");
       }

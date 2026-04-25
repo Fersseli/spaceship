@@ -2,7 +2,23 @@ import React, { useState, useEffect } from "react";
 import { playersList } from "../utils/players";
 import { shipsList } from "../data/ships";
 import "../styles/AdminDashboard.css";
-import { getAllShips, updateShipConfig, setEnemyShipStatus, clearDestroyedEnemies, deactivateAllEnemies, repairAllShipsGlobal, enforceAttributeLimits, repairShieldByAdmin, repairEnginesByAdmin } from "../utils/mockApi";
+
+// 1. IMPORTAÇÕES DO FIREBASE
+import { db } from "../utils/firebase";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+
+import { 
+  getAllShips, 
+  updateShipConfig, 
+  setEnemyShipStatus, 
+  clearDestroyedEnemies, 
+  deactivateAllEnemies, 
+  repairAllShipsGlobal, 
+  enforceAttributeLimits, 
+  repairShieldByAdmin, 
+  repairEnginesByAdmin,
+  getAllCrewAssignments // <-- NOVA FUNÇÃO IMPORTADA
+} from "../utils/mockApi";
 import TerminalCombate from "./TerminalCombate";
 import ConfirmModal from "./ConfirmModal";
 import ProximityMatrixPanel from './ProximityMatrixPanel';
@@ -41,23 +57,25 @@ const AdminDashboard = ({ onLogout }) => {
   const [alterDraft, setAlterDraft] = useState(null);
   const [manualSpeed, setManualSpeed] = useState("");
 
-  
+  // 2. PEDIDOS DE REPARO AGORA LÊM DO FIREBASE
   useEffect(() => {
-    const checkRequests = () => {
-      const reqs = JSON.parse(localStorage.getItem("repair_requests") || "[]");
-      setRepairRequests(reqs);
+    const checkRequests = async () => {
+      const snap = await getDoc(doc(db, "gameData", "repairRequests"));
+      if (snap.exists()) {
+        setRepairRequests(snap.data().requests || []);
+      }
     };
     const interval = setInterval(checkRequests, 2000);
     return () => clearInterval(interval);
   }, []);
 
-  const handleAcceptRepair = (req) => {
+  const handleAcceptRepair = async (req) => { // ASYNC
     if (req.isShield) {
-      repairShieldByAdmin(req.shipId);
+      await repairShieldByAdmin(req.shipId);
     } else if (req.isEngines) {
-      repairEnginesByAdmin(req.shipId);
+      await repairEnginesByAdmin(req.shipId);
     } else {
-      const ships = getAllShips();
+      const ships = await getAllShips();
       const ship  = ships[req.shipId];
       if (ship && ship.activeCrew) {
         const member = ship.activeCrew.find(m => m.id === req.moduleId);
@@ -65,29 +83,37 @@ const AdminDashboard = ({ onLogout }) => {
           member.moduleStatus     = 'operacional';
           member.turnosParaReparo = 0;
           enforceAttributeLimits(ship);
-          localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
+          await setDoc(doc(db, "gameData", "ships"), ships);
         }
       }
     }
+    
+    // Atualiza os pedidos no Firebase
     const filtered = repairRequests.filter(r => r.id !== req.id);
-    localStorage.setItem("repair_requests", JSON.stringify(filtered));
+    await setDoc(doc(db, "gameData", "repairRequests"), { requests: filtered });
+    setRepairRequests(filtered);
     refreshData();
   };
 
-  const handleRejectRepair = (reqId) => {
+  const handleRejectRepair = async (reqId) => { // ASYNC
     const filtered = repairRequests.filter(r => r.id !== reqId);
-    localStorage.setItem("repair_requests", JSON.stringify(filtered));
+    await setDoc(doc(db, "gameData", "repairRequests"), { requests: filtered });
+    setRepairRequests(filtered);
   };
 
+  // 3. ABA FROTA E ALTERAR AGORA PUXAM NAVES COM AWAIT
   useEffect(() => {
-    if (activeTab === "fleet" || activeTab === "alter") {
-      const data = getAllShips();
-      setFleetData(data);
-      if (activeTab === "fleet" && !selectedShipId) {
-        const firstShipId = Object.keys(data)[0];
-        if (firstShipId) handleSelectShip(firstShipId, data);
+    const loadFleet = async () => {
+      if (activeTab === "fleet" || activeTab === "alter") {
+        const data = await getAllShips();
+        setFleetData(data);
+        if (activeTab === "fleet" && !selectedShipId) {
+          const firstShipId = Object.keys(data)[0];
+          if (firstShipId) handleSelectShip(firstShipId, data);
+        }
       }
-    }
+    };
+    loadFleet();
   }, [activeTab]);
 
   const handleSelectShip = (shipId, data = fleetData) => {
@@ -96,48 +122,45 @@ const AdminDashboard = ({ onLogout }) => {
     if (ship) setEditForm({ name: ship.name, maxHP: ship.maxHP, totalPoints: ship.totalPoints });
   };
 
-  const handleSaveShip = () => {
-    updateShipConfig(selectedShipId, {
+  const handleSaveShip = async () => { // ASYNC
+    await updateShipConfig(selectedShipId, {
       name: editForm.name,
       maxHP: parseInt(editForm.maxHP),
       currentHP: parseInt(editForm.maxHP),
       totalPoints: parseInt(editForm.totalPoints)
     });
-    setFleetData(getAllShips());
+    setFleetData(await getAllShips());
     alert(`Especificações da classe ${editForm.name} atualizadas na rede!`);
   };
 
   // ─── LÓGICA DA ABA 04 (ALTERAR) ─────────────────────────────────────────────
-  const handleSelectAlterShip = (shipId) => {
+  const handleSelectAlterShip = async (shipId) => { // ASYNC
     setAlterSelectedId(shipId);
     if (!shipId) {
       setAlterDraft(null);
       return;
     }
-    const data = getAllShips();
+    const data = await getAllShips();
     setAlterDraft(JSON.parse(JSON.stringify(data[shipId])));
   };
 
   const handleSaveAlterations = () => {
     if (!alterDraft) return;
     
-    // Dispara o ConfirmModal em vez do alert()
     showConfirm({
       title: "SOBRESCREVER DADOS",
       message: `Deseja forçar a aplicação das alterações na nave [${alterDraft.name}]?`,
       subtext: "ESTA AÇÃO SOBRESCREVE A REDE E IGNORA LIMITADORES",
-      variant: "white", // Variante de cor branca
+      variant: "white",
       confirmLabel: "APLICAR NA REDE",
-      onConfirm: () => {
-        // A lógica de salvar só acontece se ele clicar em confirmar
-        const ships = getAllShips();
+      onConfirm: async () => { // ASYNC NO CONFIRM
+        const ships = await getAllShips();
         const updatedShip = { ...alterDraft };
         
         enforceAttributeLimits(updatedShip);
         
         ships[updatedShip.id] = updatedShip;
-        localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
-        window.dispatchEvent(new Event("storage"));
+        await setDoc(doc(db, "gameData", "ships"), ships); // FIREBASE
         setFleetData(ships);
         refreshData();
       }
@@ -160,8 +183,12 @@ const AdminDashboard = ({ onLogout }) => {
   };
   // ────────────────────────────────────────────────────────────────────────────
 
-  const refreshData = () => {
+  // 4. REFRESH DATA AGORA É ASYNC E LÊ TRIPULAÇÃO DA NUVEM
+  const refreshData = async () => { 
+    const allAssignments = await getAllCrewAssignments(); // FIREBASE
+
     const rawMappedData = playersList.map((player) => {
+      // Deixamos os status de login do player no localStorage por enquanto
       const isOnline   = localStorage.getItem(`status_${player.id}`) === "online";
       const rawRole    = localStorage.getItem(`role_${player.id}`);
       const currentRole = (rawRole === "piloto" || rawRole === "copiloto") ? rawRole : "tripulante";
@@ -171,7 +198,8 @@ const AdminDashboard = ({ onLogout }) => {
       let assignedFunction = "LIVRE";
       try {
         const crewKey = `crew_assignments_${savedShipId}`;
-        const crew = JSON.parse(localStorage.getItem(crewKey) || '{"copiloto": null, "torretas": {}}');
+        const crew = allAssignments[crewKey] || { copiloto: null, torretas: {} };
+        
         if (currentRole === "piloto") {
           assignedFunction = "PILOTO";
         } else if (crew.copiloto === player.id) {
@@ -185,7 +213,7 @@ const AdminDashboard = ({ onLogout }) => {
       return { ...player, online: isOnline, role: currentRole, ship: shipLabel, function: assignedFunction };
     });
 
-    const dbShips = getAllShips();
+    const dbShips = await getAllShips();
     const enemyCrewMembers = [];
     Object.values(dbShips).forEach(ship => {
       if (ship.isEnemy && ship.status === "ativa" && ship.activeCrew) {
@@ -248,6 +276,7 @@ const AdminDashboard = ({ onLogout }) => {
               </div>
             </div>
 
+            {/* 5. AWAIT NOS BOTÕES DA FROTA */}
             {activeTab === "fleet" && (
               <div className="header-fleet-controls" style={{ display: 'flex', gap: '0.5rem' }}>
                 <button
@@ -258,7 +287,11 @@ const AdminDashboard = ({ onLogout }) => {
                     message: "Restaurar integridade estrutural e módulos de TODAS as naves da frota?",
                     subtext: "OPERAÇÃO IRREVERSÍVEL — AFETA TODOS OS REGISTROS",
                     variant: "success", confirmLabel: "EXECUTAR REPARO",
-                    onConfirm: () => { repairAllShipsGlobal(); setFleetData(getAllShips()); refreshData(); },
+                    onConfirm: async () => { 
+                      await repairAllShipsGlobal(); 
+                      setFleetData(await getAllShips()); 
+                      refreshData(); 
+                    },
                   })}
                 >
                   REPARO GLOBAL
@@ -272,7 +305,11 @@ const AdminDashboard = ({ onLogout }) => {
                     message: "Desativar e remover a tripulação de todas as naves hostis ativas?",
                     subtext: "NAVES DESTRUÍDAS PERMANECEM NO REGISTRO",
                     variant: "warning", confirmLabel: "DESATIVAR TODAS",
-                    onConfirm: () => { deactivateAllEnemies(); setFleetData(getAllShips()); refreshData(); },
+                    onConfirm: async () => { 
+                      await deactivateAllEnemies(); 
+                      setFleetData(await getAllShips()); 
+                      refreshData(); 
+                    },
                   })}
                 >
                   DESATIVAR TODAS
@@ -286,7 +323,11 @@ const AdminDashboard = ({ onLogout }) => {
                     message: "Remover todos os registros de naves hostis destruídas do banco de dados?",
                     subtext: "DADOS ELIMINADOS PERMANENTEMENTE",
                     variant: "danger", confirmLabel: "PURGAR REGISTROS",
-                    onConfirm: () => { clearDestroyedEnemies(); setFleetData(getAllShips()); refreshData(); },
+                    onConfirm: async () => { 
+                      await clearDestroyedEnemies(); 
+                      setFleetData(await getAllShips()); 
+                      refreshData(); 
+                    },
                   })}
                 >
                   PURGAR DESTRUÍDAS
@@ -412,18 +453,15 @@ const AdminDashboard = ({ onLogout }) => {
                           className="fleet-input highlight-input"
                           style={{ color: fleetData[selectedShipId].status === "ativa" ? '#ff4a4a' : '#fff' }}
                           value={fleetData[selectedShipId].status || "desativada"}
-                          onChange={(e) => {
+                          onChange={async (e) => {
                           const novoStatus = e.target.value;
-                          setEnemyShipStatus(selectedShipId, novoStatus);
-                          setFleetData(getAllShips());
+                          await setEnemyShipStatus(selectedShipId, novoStatus); // ASYNC
+                          setFleetData(await getAllShips()); // ASYNC
                           refreshData();
                           
-                          // --- ADICIONE ESTE BLOCO ---
-                          // Dispara o evento de sonar em todas as abas abertas se ativar uma nave
                           if (novoStatus === "ativa") {
                             localStorage.setItem("enemy_activated_event", Date.now().toString());
                           }
-                          // ---------------------------
                         }}
                         >
                           <option value="desativada">DESATIVADA (Oculta)</option>
@@ -610,8 +648,8 @@ const AdminDashboard = ({ onLogout }) => {
               <div style={{ marginBottom: '2rem' }}>
                 <ProximityMatrixPanel 
                   allShips={fleetData} 
-                  onUpdate={() => {
-                    setFleetData(getAllShips());
+                  onUpdate={async () => {
+                    setFleetData(await getAllShips()); // ASYNC
                     refreshData();
                   }} 
                 />

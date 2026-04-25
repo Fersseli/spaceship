@@ -2,6 +2,9 @@
 import { shipsDatabase } from '../data/ships';
 import { rollDamage, parseShield } from "./diceHelpers";
 import { getEffect } from "./effectHelpers";
+import { db } from "./firebase"; // O arquivo que criamos no passo anterior
+import { doc, getDoc, setDoc, updateDoc, onSnapshot } from "firebase/firestore";
+
 
 const DB_KEY         = "heavens_door_ships_db";
 const DB_VERSION     = 13; // bumped: proximity matrix system
@@ -15,16 +18,13 @@ const DB_VERSION_KEY = "heavens_door_ships_db_version";
 
 const PROX_KEY = "heavens_door_proximity_matrix";
 
-export const getProximityMatrix = () => {
-  try {
-    return JSON.parse(localStorage.getItem(PROX_KEY) || "{}");
-  } catch {
-    return {};
-  }
+export const getProximityMatrix = async () => {
+  const docSnap = await getDoc(doc(db, "gameData", "proximityMatrix"));
+  return docSnap.exists() ? docSnap.data() : {};
 };
 
-const saveProximityMatrix = (matrix) => {
-  localStorage.setItem(PROX_KEY, JSON.stringify(matrix));
+const saveProximityMatrix = async (matrix) => {
+  await setDoc(doc(db, "gameData", "proximityMatrix"), matrix);
 };
 
 const proxKey = (aliadoId, inimigoId) => `${aliadoId}__${inimigoId}`;
@@ -33,8 +33,8 @@ const proxKey = (aliadoId, inimigoId) => `${aliadoId}__${inimigoId}`;
  * Retorna a proximidade entre uma nave aliada e uma nave inimiga.
  * Default: 3 (Médio).
  */
-export const getProximity = (aliadoId, inimigoId) => {
-  const matrix = getProximityMatrix();
+export const getProximity = async (aliadoId, inimigoId) => {
+  const matrix = await getProximityMatrix();
   const val = matrix[proxKey(aliadoId, inimigoId)];
   return val !== undefined ? val : 3;
 };
@@ -43,27 +43,27 @@ export const getProximity = (aliadoId, inimigoId) => {
  * Define a proximidade entre uma nave aliada e uma nave inimiga.
  * Garante que fique entre 1 e 5.
  */
-export const setProximity = (aliadoId, inimigoId, value) => {
-  const matrix = getProximityMatrix();
+export const setProximity = async (aliadoId, inimigoId, value) => {
+  const matrix = await getProximityMatrix();
   matrix[proxKey(aliadoId, inimigoId)] = Math.max(1, Math.min(5, value));
-  saveProximityMatrix(matrix);
+  await saveProximityMatrix(matrix);
   return matrix[proxKey(aliadoId, inimigoId)];
 };
 
 /**
  * Muda a proximidade de forma relativa (delta).
  */
-export const changeProximity = (aliadoId, inimigoId, delta) => {
-  const current = getProximity(aliadoId, inimigoId);
-  return setProximity(aliadoId, inimigoId, current + delta);
+export const changeProximity = async (aliadoId, inimigoId, delta) => {
+  const current = await getProximity(aliadoId, inimigoId);
+  return await setProximity(aliadoId, inimigoId, current + delta);
 };
 
 /**
  * Remove todas as entradas de proximidade envolvendo uma nave específica
  * (útil quando uma nave é destruída ou desativada).
  */
-export const removeProximityEntries = (shipId) => {
-  const matrix = getProximityMatrix();
+export const removeProximityEntries = async (shipId) => {
+  const matrix = await getProximityMatrix();
   const newMatrix = {};
   Object.entries(matrix).forEach(([key, val]) => {
     const [a, b] = key.split("__");
@@ -71,16 +71,16 @@ export const removeProximityEntries = (shipId) => {
       newMatrix[key] = val;
     }
   });
-  saveProximityMatrix(newMatrix);
+  await saveProximityMatrix(newMatrix);
 };
 
 /**
  * Inicializa entradas de proximidade para um inimigo recém-ativado
  * contra todas as naves aliadas ativas (default P3).
  */
-export const initEnemyProximity = (enemyId) => {
-  const ships = getAllShips();
-  const matrix = getProximityMatrix();
+export const initEnemyProximity = async (enemyId) => {
+  const ships = await getAllShips();
+  const matrix = await getProximityMatrix();
   Object.values(ships).forEach(ship => {
     if (!ship.isEnemy) {
       const key = proxKey(ship.id, enemyId);
@@ -89,25 +89,27 @@ export const initEnemyProximity = (enemyId) => {
       }
     }
   });
-  saveProximityMatrix(matrix);
+  await saveProximityMatrix(matrix);
 };
 
 /**
  * Retorna todos os inimigos e suas proximidades relativas a uma nave aliada.
  * Formato: [{ enemyId, enemyName, proximity }]
  */
-export const getEnemyProximitiesForShip = (aliadoId) => {
-  const ships = getAllShips();
+export const getEnemyProximitiesForShip = async (aliadoId) => {
+  const ships = await getAllShips();
   const result = [];
-  Object.values(ships).forEach(ship => {
+  // Como getProximity agora é async, precisamos de um loop for...of
+  for (const ship of Object.values(ships)) {
     if (ship.isEnemy && ship.status === "ativa") {
+      const prox = await getProximity(aliadoId, ship.id);
       result.push({
         enemyId: ship.id,
         enemyName: ship.name,
-        proximity: getProximity(aliadoId, ship.id),
+        proximity: prox,
       });
     }
-  });
+  }
   return result;
 };
 
@@ -132,8 +134,8 @@ export const getMaxSpeed = (ship) => {
   return match ? parseInt(match[1]) : 0;
 };
 
-export const accelerateShip = (shipId, rollValue) => {
-  const ships = getAllShips();
+export const accelerateShip = async (shipId, rollValue) => {
+  const ships = await getAllShips();
   const ship = ships[shipId];
   if (!ship) return { newSpeed: 0, maxSpeed: 0 };
   ensureNavigationFields(ship);
@@ -141,23 +143,23 @@ export const accelerateShip = (shipId, rollValue) => {
   const newSpeed = Math.min(ship.currentSpeed + parseInt(rollValue || 0), maxSpeed);
   ship.currentSpeed = newSpeed;
   ship.isDerrapando = false;
-  localStorage.setItem(DB_KEY, JSON.stringify(ships));
+  await setDoc(doc(db, "gameData", "ships"), ships);
   return { newSpeed, maxSpeed };
 };
 
-export const failManeuver = (shipId) => {
-  const ships = getAllShips();
+export const failManeuver = async (shipId) => {
+  const ships = await getAllShips();
   const ship = ships[shipId];
   if (!ship) return 0;
   ensureNavigationFields(ship);
   ship.currentSpeed = Math.floor(ship.currentSpeed / 2);
   ship.isDerrapando = true;
-  localStorage.setItem(DB_KEY, JSON.stringify(ships));
+  await setDoc(doc(db, "gameData", "ships"), ships);
   return ship.currentSpeed;
 };
 
-export const rollEnemySpeed = (shipId) => {
-  const ships = getAllShips();
+export const rollEnemySpeed = async (shipId) => {
+  const ships = await getAllShips();
   const ship = ships[shipId];
   if (!ship || !ship.isEnemy) return { newSpeed: 0, maxSpeed: 0, rolled: 0, success: false };
   ensureNavigationFields(ship);
@@ -177,13 +179,13 @@ export const rollEnemySpeed = (shipId) => {
     const newSpeed = Math.min(ship.currentSpeed + rolled, maxSpeed);
     ship.currentSpeed = newSpeed;
     ship.isDerrapando = false;
-    localStorage.setItem(DB_KEY, JSON.stringify(ships));
+    await setDoc(doc(db, "gameData", "ships"), ships);
     return { newSpeed, maxSpeed, rolled, success, d100, precisao };
   } else {
     const newSpeed = Math.floor(ship.currentSpeed / 2);
     ship.currentSpeed = newSpeed;
     ship.isDerrapando = true;
-    localStorage.setItem(DB_KEY, JSON.stringify(ships));
+    await setDoc(doc(db, "gameData", "ships"), ships);
     return { newSpeed, maxSpeed, rolled: 0, success, d100, precisao };
   }
 };
@@ -192,8 +194,8 @@ export const rollEnemySpeed = (shipId) => {
  * Resolve engajamento entre UMA nave aliada e todos os inimigos ativos.
  * Retorna resultados individuais com proximidades relativas àquela nave aliada.
  */
-export const resolveEngagement = (playerShipId) => {
-  const ships = getAllShips();
+export const resolveEngagement = async (playerShipId) => {
+  const ships = await getAllShips();
   const playerShip = ships[playerShipId];
   if (!playerShip) return [];
   ensureNavigationFields(playerShip);
@@ -234,45 +236,67 @@ export const getProximityModifiers = (proximity, isDerrapando = false) => {
 // CÓDIGO ORIGINAL (mantido integralmente)
 // ═══════════════════════════════════════════════════════════════════
 
-export const removePlayerFromAllCrews = (playerId) => {
-  const CREW_PREFIX = "crew_assignments_";
-  Object.keys(localStorage).forEach(key => {
-    if (key.startsWith(CREW_PREFIX)) {
-      try {
-        const assignments = JSON.parse(localStorage.getItem(key));
-        let changed = false;
-        if (assignments.copiloto === playerId) { assignments.copiloto = null; changed = true; }
-        if (assignments.torretas) {
-          Object.keys(assignments.torretas).forEach(tId => {
-            if (assignments.torretas[tId] === playerId) { delete assignments.torretas[tId]; changed = true; }
-          });
-        }
-        if (changed) localStorage.setItem(key, JSON.stringify(assignments));
-      } catch (e) { console.error("Erro ao limpar tripulação na chave:", key, e); }
-    }
-  });
+export const getAllCrewAssignments = async () => {
+  const docSnap = await getDoc(doc(db, "gameData", "crewAssignments"));
+  return docSnap.exists() ? docSnap.data() : {};
 };
 
-export const initDB = () => {
-  const savedVersion = parseInt(localStorage.getItem(DB_VERSION_KEY) || "0");
-  if (!localStorage.getItem(DB_KEY) || savedVersion < DB_VERSION) {
-    localStorage.setItem(DB_KEY, JSON.stringify(shipsDatabase));
-    localStorage.setItem(DB_VERSION_KEY, String(DB_VERSION));
+// SUBSTITUIR A ANTIGA
+export const removePlayerFromAllCrews = async (playerId) => {
+  const allAssignments = await getAllCrewAssignments();
+  let changed = false;
+
+  Object.keys(allAssignments).forEach(key => {
+    const assignments = allAssignments[key];
+    if (assignments.copiloto === playerId) { 
+      assignments.copiloto = null; 
+      changed = true; 
+    }
+    if (assignments.torretas) {
+      Object.keys(assignments.torretas).forEach(tId => {
+        if (assignments.torretas[tId] === playerId) { 
+          delete assignments.torretas[tId]; 
+          changed = true; 
+        }
+      });
+    }
+  });
+
+  if (changed) {
+    await setDoc(doc(db, "gameData", "crewAssignments"), allAssignments);
   }
-  const allShipsForInit = JSON.parse(localStorage.getItem(DB_KEY) || "{}");
+};
+export const initDB = async () => {
+  // A própria getAllShips já verifica e inicializa os dados com shipsDatabase se estiver vazio
+  const allShipsForInit = await getAllShips();
   let navChanged = false;
+  
   Object.values(allShipsForInit).forEach(ship => {
     const before = JSON.stringify(ship);
     ensureNavigationFields(ship);
     if (JSON.stringify(ship) !== before) navChanged = true;
   });
-  if (navChanged) localStorage.setItem(DB_KEY, JSON.stringify(allShipsForInit));
+  
+  if (navChanged) {
+    await setDoc(doc(db, "gameData", "ships"), allShipsForInit);
+  }
 };
 
-export const getAllShips = () => {
-  initDB();
-  return JSON.parse(localStorage.getItem(DB_KEY));
+export const getAllShips = async () => {
+  const docRef = doc(db, "gameData", "ships");
+  const docSnap = await getDoc(docRef);
+  
+  if (docSnap.exists()) {
+    return docSnap.data();
+  } else {
+    // Se não existir, retorna as naves padrão e já cria no banco
+    await setDoc(docRef, shipsDatabase);
+    return shipsDatabase;
+  }
 };
+
+// E em TODAS as funções onde você tinha localStorage.setItem(DB_KEY, ...), você vai usar:
+// await setDoc(doc(db, "gameData", "ships"), ships);
 
 export const getShipMaxAttributes = (ship) => {
   const maxAttrs = { weapons: 6, missiles: 6, controls: 6, shields: 6, engines: 6 };
@@ -313,8 +337,8 @@ export const enforceAttributeLimits = (ship) => {
   return changed;
 };
 
-export const getShipData = (shipId) => {
-  const ships = getAllShips();
+export const getShipData = async (shipId) => {
+  const ships = await getAllShips();
   const ship = ships[shipId];
 
   if (ship && !ship.isEnemy && (!ship.activeCrew || ship.activeCrew.length === 0)) {
@@ -323,39 +347,42 @@ export const getShipData = (shipId) => {
       function: `TORRETA ${t.id.toUpperCase()}`,
       moduleStatus: 'operacional', turnosParaReparo: 0
     }));
-    localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
+  await setDoc(doc(db, "gameData", "ships"), ships);
   }
   if (ship && ship.shieldStatus === undefined) {
     ship.shieldStatus = 'operacional'; ship.shieldTurnosParaReparo = 0;
-    localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
+  await setDoc(doc(db, "gameData", "ships"), ships);
   }
   if (ship && ship.enginesStatus === undefined) {
     ship.enginesStatus = 'operacional'; ship.enginesTurnosParaReparo = 0;
-    localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
+  await setDoc(doc(db, "gameData", "ships"), ships);
   }
   if (ship) ensureNavigationFields(ship);
   return ship;
 };
 
-export const getCrewByShip = (shipId) => {
-  const keys = Object.keys(localStorage);
+export const getCrewByShip = async (shipId) => {
+  const allAssignments = await getAllCrewAssignments();
+  const keys = Object.keys(allAssignments);
+  
   return keys
-    .filter(k => k.startsWith("ship_") && localStorage.getItem(k) === shipId)
+    .filter(k => k.startsWith("ship_") && allAssignments[k] === shipId)
     .map(k => k.replace("ship_", ""));
 };
 
-export const updateShipAttributes = (shipId, newAttributes) => {
-  const ships = getAllShips();
-  if (ships[shipId]) { ships[shipId].attributes = newAttributes; localStorage.setItem(DB_KEY, JSON.stringify(ships)); }
+export const updateShipAttributes = async (shipId, newAttributes) => {
+  const ships = await getAllShips();
+  if (ships[shipId]) { ships[shipId].attributes = newAttributes; 
+    await setDoc(doc(db, "gameData", "ships"), ships); }
 };
 
-export const updateShipConfig = (shipId, newData) => {
-  const ships = getAllShips();
-  if (ships[shipId]) { ships[shipId] = { ...ships[shipId], ...newData }; localStorage.setItem(DB_KEY, JSON.stringify(ships)); }
+export const updateShipConfig = async (shipId, newData) => {
+  const ships = await getAllShips();
+  if (ships[shipId]) { ships[shipId] = { ...ships[shipId], ...newData }; await setDoc(doc(db, "gameData", "ships"), ships); }
 };
 
-export const clearDestroyedEnemies = () => {
-  const ships = getAllShips();
+export const clearDestroyedEnemies = async () => {
+  const ships = await getAllShips();
   let changed = false;
   Object.values(ships).forEach(s => {
     if (s.isEnemy && s.status === "destruida") {
@@ -363,11 +390,11 @@ export const clearDestroyedEnemies = () => {
       s.status = "desativada"; s.activeCrew = []; changed = true;
     }
   });
-  if (changed) localStorage.setItem(DB_KEY, JSON.stringify(ships));
+  if (changed) await setDoc(doc(db, "gameData", "ships"), ships);;
 };
 
-export const deactivateAllEnemies = () => {
-  const ships = getAllShips();
+export const deactivateAllEnemies = async () => {
+  const ships = await getAllShips();
   let changed = false;
   Object.values(ships).forEach(s => {
     if (s.isEnemy && s.status !== "desativada") {
@@ -375,7 +402,7 @@ export const deactivateAllEnemies = () => {
       s.status = "desativada"; s.activeCrew = []; changed = true;
     }
   });
-  if (changed) localStorage.setItem(DB_KEY, JSON.stringify(ships));
+  if (changed) await setDoc(doc(db, "gameData", "ships"), ships);
 };
 
 export const enemyNamesPool = [...new Set([
@@ -385,8 +412,8 @@ export const enemyNamesPool = [...new Set([
 const rndPrecisaoPiloto = () => Math.floor(Math.random() * (75 - 50 + 1)) + 50;
 const rndPrecisao = () => Math.floor(Math.random() * (70 - 40 + 1)) + 40;
 
-export const setEnemyShipStatus = (shipId, newStatus) => {
-  const ships = getAllShips();
+export const setEnemyShipStatus = async (shipId, newStatus) => {
+  const ships = await getAllShips();
   const ship = ships[shipId];
   if (!ship || !ship.isEnemy) return;
 
@@ -422,7 +449,7 @@ export const setEnemyShipStatus = (shipId, newStatus) => {
     ship.isDerrapando = false;
     // Inicializa proximidade na matriz para todos os aliados
     ship.status = newStatus;
-    localStorage.setItem(DB_KEY, JSON.stringify(ships));
+    await setDoc(doc(db, "gameData", "ships"), ships);
     initEnemyProximity(shipId);
     return;
   }
@@ -437,11 +464,11 @@ export const setEnemyShipStatus = (shipId, newStatus) => {
   }
 
   ship.status = newStatus;
-  localStorage.setItem(DB_KEY, JSON.stringify(ships));
+  await setDoc(doc(db, "gameData", "ships"), ships);
 };
 
-export const applyModuleDamage = (shipId, memberId) => {
-  const ships = getAllShips();
+export const applyModuleDamage =  async (shipId, memberId) => {
+  const ships = await getAllShips();
   const ship = ships[shipId];
   if (!ship || !ship.activeCrew) return "Alvo não encontrado";
   const member = ship.activeCrew.find(m => m.id === memberId);
@@ -451,12 +478,12 @@ export const applyModuleDamage = (shipId, memberId) => {
   else if (member.moduleStatus === 'avariada') { member.moduleStatus = 'destruida'; member.turnosParaReparo = 0; statusMsg = `${member.id} DESTRUÍDA PERMANENTEMENTE!`; }
   else return "Módulo já está destruído";
   enforceAttributeLimits(ship);
-  localStorage.setItem(DB_KEY, JSON.stringify(ships));
+  await setDoc(doc(db, "gameData", "ships"), ships);
   return statusMsg;
 };
 
-export const applyShieldDamage = (shipId) => {
-  const ships = getAllShips();
+export const applyShieldDamage = async (shipId) => {
+  const ships = await getAllShips();
   const ship = ships[shipId];
   if (!ship) return "Nave não encontrada";
   if (!ship.shieldStatus) ship.shieldStatus = 'operacional';
@@ -465,12 +492,12 @@ export const applyShieldDamage = (shipId) => {
   else if (ship.shieldStatus === 'avariada') { ship.shieldStatus = 'destruida'; ship.shieldTurnosParaReparo = 3; }
   else return "Escudos já estão completamente destruídos";
   enforceAttributeLimits(ship);
-  localStorage.setItem(DB_KEY, JSON.stringify(ships));
+  await setDoc(doc(db, "gameData", "ships"), ships);
   return "ok";
 };
 
-export const applyEnginesDamage = (shipId) => {
-  const ships = getAllShips();
+export const applyEnginesDamage = async (shipId) => {
+  const ships = await getAllShips();
   const ship = ships[shipId];
   if (!ship) return "Nave não encontrada";
   if (!ship.enginesStatus) ship.enginesStatus = 'operacional';
@@ -479,7 +506,7 @@ export const applyEnginesDamage = (shipId) => {
   else if (ship.enginesStatus === 'avariada') { ship.enginesStatus = 'destruida'; ship.enginesTurnosParaReparo = 3; }
   else return "Motores já estão completamente destruídos";
   enforceAttributeLimits(ship);
-  localStorage.setItem(DB_KEY, JSON.stringify(ships));
+  await setDoc(doc(db, "gameData", "ships"), ships);
   return "ok";
 };
 
@@ -506,8 +533,8 @@ export const selectDamageTarget = (ship) => {
   return candidates[candidates.length - 1];
 };
 
-export const processGlobalTurn = () => {
-  const ships = getAllShips();
+export const processGlobalTurn = async () => {
+  const ships = await getAllShips();
   let relatorio = [];
 
   Object.values(ships).forEach(ship => {
@@ -540,14 +567,16 @@ export const processGlobalTurn = () => {
     enforceAttributeLimits(ship);
   });
 
-  localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
+  await setDoc(doc(db, "gameData", "ships"), ships);
   return relatorio;
 };
 
-export const processPlayerAttack = (attackerShipId, targetShipId, inputDamage, isExtremo, weaponEffect, isMissile = false) => {
-  const ships = getAllShips();
+export const processPlayerAttack = async (attackerShipId, targetShipId, inputDamage, isExtremo, weaponEffect, isMissile = false) => {
+  // 1. Corrigido para camelCase: getAllShips
+  const ships = await getAllShips();
   const attacker = ships[attackerShipId];
   const target   = ships[targetShipId];
+  
   if (!attacker || !target) return;
   if (!target.shieldStatus) target.shieldStatus = 'operacional';
   if (!target.shieldTurnosParaReparo) target.shieldTurnosParaReparo = 0;
@@ -581,6 +610,7 @@ export const processPlayerAttack = (attackerShipId, targetShipId, inputDamage, i
 
   enforceAttributeLimits(target);
 
+  // 2. Trocado o localStorage pelo setDoc do Firebase
   if (isMissile) {
     attacker.missileCooldown = 2;
     if (attacker.activeCrew) {
@@ -588,31 +618,34 @@ export const processPlayerAttack = (attackerShipId, targetShipId, inputDamage, i
         if (m.missileTarget || m.missileLockLevel > 0) { m.missileLockLevel = 0; m.missileTarget = null; m.missileReady = false; }
       });
     }
-    localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
+    await setDoc(doc(db, "gameData", "ships"), ships);
   }
 
+  // 3. O callback do setTimeout agora é async e usa o banco em tempo real
   if (target.currentHP <= 0 && target.status !== "destruida" && target.isEnemy) {
-    setTimeout(() => {
-      const currentShips = JSON.parse(localStorage.getItem("heavens_door_ships_db") || "{}");
+    setTimeout(async () => {
+      const currentShips = await getAllShips();
       if (currentShips[targetShipId] && currentShips[targetShipId].currentHP <= 0) {
-        currentShips[targetShipId].status = "destruida"; currentShips[targetShipId].activeCrew = [];
-        removeProximityEntries(targetShipId);
-        const dbString = JSON.stringify(currentShips);
-        localStorage.setItem("heavens_door_ships_db", dbString);
-        window.dispatchEvent(new StorageEvent('storage', { key: 'heavens_door_ships_db', newValue: dbString }));
+        currentShips[targetShipId].status = "destruida"; 
+        currentShips[targetShipId].activeCrew = [];
+        await removeProximityEntries(targetShipId); // Precisa de await agora!
+        
+        await setDoc(doc(db, "gameData", "ships"), currentShips);
+        // O StorageEvent foi removido pois o Firebase onSnapshot cuidará de atualizar a tela
       }
     }, 4000);
   }
 
-  localStorage.setItem("heavens_door_ships_db", JSON.stringify(ships));
+  // 4. Salva o estado principal das naves no Firebase
+  await setDoc(doc(db, "gameData", "ships"), ships);
 
   const tags = [];
   if (isExtremo) tags.push("[🔥 ACERTO EXTREMO!]");
   else if (isCritico) tags.push("[✨ CRÍTICO!]");
   if (moduleLog) tags.push(moduleLog);
 
-  // Proximidade do atacante em relação ao alvo
-  const proxVal = getProximity(attackerShipId, targetShipId);
+  // 5. Adicionado await na leitura da proximidade
+  const proxVal = await getProximity(attackerShipId, targetShipId);
   const proxInfo = target.isEnemy ? ` [P${proxVal}]` : "";
 
   const logText = [
@@ -635,7 +668,8 @@ export const processPlayerAttack = (attackerShipId, targetShipId, inputDamage, i
     enginesDestroyed: moduleLog.includes("DESTRUÍDOS") && moduleLog.includes("MOTORES"),
   };
 
-  localStorage.setItem("last_combat_event", JSON.stringify(combatEvent));
+  // 6. O salvamento do log de combate continua certinho!
+  await setDoc(doc(db, "gameData", "lastCombatEvent"), combatEvent);
   window.dispatchEvent(new CustomEvent("combat:event", { detail: combatEvent }));
 };
 
@@ -653,8 +687,8 @@ const applyEnginesDamageInternal = (ship) => {
   return "já destruídos";
 };
 
-export const repairAllShipsGlobal = () => {
-  const ships = getAllShips();
+export const repairAllShipsGlobal = async () => {
+  const ships = await getAllShips();
   let changed = false;
   Object.values(ships).forEach(ship => {
     if (ship.currentHP < ship.maxHP) { ship.currentHP = ship.maxHP; changed = true; }
@@ -668,30 +702,30 @@ export const repairAllShipsGlobal = () => {
     if (ship.enginesStatus && ship.enginesStatus !== 'operacional') { ship.enginesStatus = 'operacional'; ship.enginesTurnosParaReparo = 0; changed = true; }
     enforceAttributeLimits(ship);
   });
-  if (changed) localStorage.setItem(DB_KEY, JSON.stringify(ships));
+  if (changed) await setDoc(doc(db, "gameData", "ships"), ships);
   return changed;
 };
 
-export const repairShieldByAdmin = (shipId) => {
-  const ships = getAllShips();
+export const repairShieldByAdmin = async (shipId) => {
+  const ships = await getAllShips();
   const ship  = ships[shipId];
   if (!ship) return;
   ship.shieldStatus = 'operacional'; ship.shieldTurnosParaReparo = 0;
   enforceAttributeLimits(ship);
-  localStorage.setItem(DB_KEY, JSON.stringify(ships));
+  await setDoc(doc(db, "gameData", "ships"), ships);
 };
 
-export const repairEnginesByAdmin = (shipId) => {
-  const ships = getAllShips();
+export const repairEnginesByAdmin = async (shipId) => {
+  const ships = await getAllShips();
   const ship  = ships[shipId];
   if (!ship) return;
   ship.enginesStatus = 'operacional'; ship.enginesTurnosParaReparo = 0;
   enforceAttributeLimits(ship);
-  localStorage.setItem(DB_KEY, JSON.stringify(ships));
+  await setDoc(doc(db, "gameData", "ships"), ships);
 };
 
-export const incrementMissileLock = (shipId) => {
-  const ships = getAllShips();
+export const incrementMissileLock = async (shipId) => {
+  const ships = await getAllShips();
   const ship  = ships[shipId];
   let alerts  = [];
   let changed = false;
@@ -710,7 +744,7 @@ export const incrementMissileLock = (shipId) => {
         }
       }
     });
-    if (changed) localStorage.setItem(DB_KEY, JSON.stringify(ships));
+    if (changed) await setDoc(doc(db, "gameData", "ships"), ships);
   }
   return alerts;
 };
@@ -724,8 +758,8 @@ export const isBallisticLockEligible = (member, ship) => {
   return false;
 };
 
-export const incrementBallisticLock = (shipId) => {
-  const ships = getAllShips();
+export const incrementBallisticLock = async (shipId) => {
+  const ships = await getAllShips();
   const ship  = ships[shipId];
   let alerts  = [];
   let changed = false;
@@ -739,6 +773,6 @@ export const incrementBallisticLock = (shipId) => {
       alerts.push(`ALERTA TÁTICO: Mira balística da ${ship.name} - ${member.function} atingiu trava máxima! Disparo com SUPER VANTAGEM disponível.`);
     }
   });
-  if (changed) localStorage.setItem(DB_KEY, JSON.stringify(ships));
+  if (changed) await setDoc(doc(db, "gameData", "ships"), ships);
   return alerts;
 };
