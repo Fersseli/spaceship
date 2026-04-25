@@ -287,6 +287,7 @@ const CrewSlot = ({ member, attackerShip, allShips, proxMatrix, onFire }) => {
 
 const ShipAttributeAdjuster = ({ ship, onUpdate }) => {
   const maxAttrs = getShipMaxAttributes(ship);
+  const attributeOrder = ["weapons", "missiles", "controls", "shields", "engines"];
 
   const handleLevelChange = async (attr, delta) => {
     const currentAttrs = { ...ship.attributes };
@@ -306,9 +307,12 @@ const ShipAttributeAdjuster = ({ ship, onUpdate }) => {
 
   return (
     <div className="tc-attr-compact-row">
-      {Object.entries(ship.attributes || {}).map(([attr, val]) => {
-        const maxAllowed = maxAttrs[attr];
+      {/* 🚀 Usando a ordem fixa em vez do Object.entries */}
+      {attributeOrder.map((attr) => {
+        const val = ship.attributes?.[attr] || 0;
+        const maxAllowed = maxAttrs[attr] || 6;
         const isBlocked  = val >= maxAllowed && maxAllowed < 6;
+        
         return (
           <div key={attr} className={`tc-mini-ctrl ${isBlocked ? 'tc-mini-ctrl--blocked' : ''}`}>
             <span className="tc-mini-label">{attr.substring(0, 3).toUpperCase()}</span>

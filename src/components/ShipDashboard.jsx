@@ -595,6 +595,7 @@ const shipInfo = shipDataState;
 
   const attrNames = { weapons: "Armas", missiles: "Mísseis", controls: "Controles", shields: "Escudos", engines: "Motores" };
   const attrShort = { weapons: "ARM", missiles: "MSL", controls: "CON", shields: "ESC", engines: "MOT" };
+  const attributeOrder = ["weapons", "missiles", "controls", "shields", "engines"];
 
   const targetShip = allShipsList.find(s => s.id === attackTarget);
   const isCurrentlyAiming = attackWeaponType === "missiles" && centerTurret && centerTurret.missileTarget;
@@ -645,15 +646,18 @@ const shipInfo = shipDataState;
         <main className="dashboard-main">
           <section className="attributes-list">
             <h2>Atributos</h2>
-            {Object.entries(attributes).map(([name, value]) => (
-              <div className="attribute-item" key={name}>
-                <div className="attribute-item-name">{attrNames[name]}</div>
-                <div className="attribute-item-value">
-                  <span>[ {value} ]</span>
-                  <span>{getEffect(shipInfo.shipClass, name, value)}</span>
+            {attributeOrder.map((name) => {
+              const value = attributes[name] || 0;
+              return (
+                <div className="attribute-item" key={name}>
+                  <div className="attribute-item-name">{attrNames[name]}</div>
+                  <div className="attribute-item-value">
+                    <span>[ {value} ]</span>
+                    <span>{getEffect(shipInfo.shipClass, name, value)}</span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </section>
 
           <section className="ship-control-panel">
@@ -662,45 +666,47 @@ const shipInfo = shipDataState;
               <p>Sistema de Distribuição de Pontos</p>
             </div>
             <div className="control-grid">
-              {Object.entries(attributes).map(([name, value]) => (
-                <div key={name} className="control-slot">
-                  <div className="control-slot-label">{attrShort[name]}</div>
-                  <div className="control-slot-bars">{renderBars(name, value)}</div>
+              {attributeOrder.map((name) => {
+                const value = attributes[name] || 0;
+                return (
+                  <div key={name} className="control-slot">
+                    <div className="control-slot-label">{attrShort[name]}</div>
+                    <div className="control-slot-bars">{renderBars(name, value)}</div>
 
-                  {/* ─── BOLINHAS DE AVARIA DOS ESCUDOS ─────────────────── */}
-                  {name === "shields" && shieldStatus !== 'operacional' && (
-                    <div className="shield-damage-indicator">
-                      {/* 2 bolinhas = avariado; 3 bolinhas = destruído */}
-                      {Array.from({ length: shieldTurnos }).map((_, i) => (
-                        <span
-                          key={i}
-                          className={`shield-dmg-dot ${shieldStatus === 'destruida' ? 'destroyed' : 'damaged'}`}
-                          title={`Escudos ${shieldStatus} — ${shieldTurnos} turno(s)`}
-                        />
-                      ))}
-                      <span className={`shield-dmg-label ${shieldStatus === 'destruida' ? 'destroyed' : 'damaged'}`}>
-                        {shieldStatus === 'destruida' ? 'OFFLINE' : 'AVARIADO'}
-                      </span>
-                    </div>
-                  )}
+                    {/* ─── BOLINHAS DE AVARIA DOS ESCUDOS ─────────────────── */}
+                    {name === "shields" && shieldStatus !== 'operacional' && (
+                      <div className="shield-damage-indicator">
+                        {Array.from({ length: shieldTurnos }).map((_, i) => (
+                          <span
+                            key={i}
+                            className={`shield-dmg-dot ${shieldStatus === 'destruida' ? 'destroyed' : 'damaged'}`}
+                            title={`Escudos ${shieldStatus} — ${shieldTurnos} turno(s)`}
+                          />
+                        ))}
+                        <span className={`shield-dmg-label ${shieldStatus === 'destruida' ? 'destroyed' : 'damaged'}`}>
+                          {shieldStatus === 'destruida' ? 'OFFLINE' : 'AVARIADO'}
+                        </span>
+                      </div>
+                    )}
 
-                  {/* ─── BOLINHAS DE AVARIA DOS MOTORES ──────────────────── */}
-                  {name === "engines" && enginesStatus !== 'operacional' && (
-                    <div className="shield-damage-indicator">
-                      {Array.from({ length: enginesTurnos }).map((_, i) => (
-                        <span
-                          key={i}
-                          className={`shield-dmg-dot ${enginesStatus === 'destruida' ? 'destroyed' : 'damaged-engines'}`}
-                          title={`Motores ${enginesStatus} — ${enginesTurnos} turno(s)`}
-                        />
-                      ))}
-                      <span className={`shield-dmg-label ${enginesStatus === 'destruida' ? 'destroyed' : 'damaged-engines'}`}>
-                        {enginesStatus === 'destruida' ? 'OFFLINE' : 'AVARIADO'}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              ))}
+                    {/* ─── BOLINHAS DE AVARIA DOS MOTORES ──────────────────── */}
+                    {name === "engines" && enginesStatus !== 'operacional' && (
+                      <div className="shield-damage-indicator">
+                        {Array.from({ length: enginesTurnos }).map((_, i) => (
+                          <span
+                            key={i}
+                            className={`shield-dmg-dot ${enginesStatus === 'destruida' ? 'destroyed' : 'damaged-engines'}`}
+                            title={`Motores ${enginesStatus} — ${enginesTurnos} turno(s)`}
+                          />
+                        ))}
+                        <span className={`shield-dmg-label ${enginesStatus === 'destruida' ? 'destroyed' : 'damaged-engines'}`}>
+                          {enginesStatus === 'destruida' ? 'OFFLINE' : 'AVARIADO'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                ); // <-- fechamento do return
+              })} {/* <-- fechamento do map */}
             </div>
 
             <div className="ship-display">
