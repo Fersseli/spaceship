@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { db } from "../utils/firebase"; // <-- IMPORTANTE
-import { doc, setDoc } from "firebase/firestore"; // <-- IMPORTANTE
+import { doc, setDoc, onSnapshot } from "firebase/firestore"; // <-- IMPORTANTE
 import {
   getAllShips,
   updateShipConfig,
