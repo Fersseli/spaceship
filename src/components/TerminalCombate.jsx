@@ -16,6 +16,7 @@ import {
   enforceAttributeLimits,
   getProximityModifiers,
   getProximityMatrix, // <-- IMPORTANTE ADICIONAR ESTA
+  getProximity, // <-- ADICIONE O GET PROXIMITY AQUI
   resolveEngagement,
   ensureNavigationFields,
 } from "../utils/mockApi";
@@ -54,7 +55,8 @@ const getPrecisao = (member) =>
 
 // ─── Slot de tripulante ───────────────────────────────────────────────────────
 
-const CrewSlot = ({ member, attackerShip, allShips, onFire }) => {
+const CrewSlot = ({ member, attackerShip, allShips, proxMatrix, onFire }) => {
+  
   const [open, setOpen] = useState(false);
   const [targetId, setTargetId] = useState("");
 
@@ -324,7 +326,7 @@ const ShipAttributeAdjuster = ({ ship, onUpdate }) => {
 
 // ─── Card Tático ──────────────────────────────────────────────────────────────
 
-const TacticalCard = ({ ship, allShips, onFire, onUpdate }) => {
+const TacticalCard = ({ ship, allShips, proxMatrix, onFire, onUpdate }) => {
   const hpPct       = Math.round((ship.currentHP / ship.maxHP) * 100);
   const crew        = ship.activeCrew || [];
   const isDestroyed = ship.currentHP <= 0;
