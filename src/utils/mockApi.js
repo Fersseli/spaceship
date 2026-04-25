@@ -5,11 +5,11 @@ import { getEffect } from "./effectHelpers";
 import { db } from "./firebase"; // O arquivo que criamos no passo anterior
 import { doc, getDoc, setDoc, updateDoc, onSnapshot } from "firebase/firestore";
 
-
+/*
 const DB_KEY         = "heavens_door_ships_db";
 const DB_VERSION     = 13; // bumped: proximity matrix system
 const DB_VERSION_KEY = "heavens_door_ships_db_version";
-
+*/
 // ═══════════════════════════════════════════════════════════════════
 // MATRIZ DE PROXIMIDADE RELACIONAL
 // Estrutura: { "aliadoId__inimigoId": 3, ... }

@@ -12,6 +12,7 @@ import {
   getProximityMatrix,
 } from "../utils/mockApi";
 import "../styles/RadarTatico.css";
+import React, { memo } from 'react';
 
 const proximityLabel = (p) => ["", "CONTATO", "PERTO", "MÉDIO", "LONGE", "LIMITE"][p] ?? "—";
 
@@ -516,4 +517,4 @@ const RadarTatico = ({
   );
 };
 
-export default RadarTatico;
+export default memo(RadarTatico);

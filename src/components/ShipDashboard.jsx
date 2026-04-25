@@ -67,25 +67,31 @@ const [shipDataState, setShipDataState] = useState(null);
 
   const playFailSound = () => {
     if (failSound.current) {
-      failSound.current.currentTime = 0;
-      failSound.current.volume = 1.0;
-      failSound.current.play().catch(() => {});
+      setTimeout(() => {
+        failSound.current.currentTime = 0;
+        failSound.current.volume = 1.0;
+        failSound.current.play().catch(() => {});
+      }, 0); // 🚀 Joga pro background
     }
   };
 
   const playSelectSound = () => {
     if (selectSound.current) {
-      selectSound.current.currentTime = 0;
-      selectSound.current.volume = 1.0;
-      selectSound.current.play().catch(() => {});
+      setTimeout(() => {
+        selectSound.current.currentTime = 0;
+        selectSound.current.volume = 1.0;
+        selectSound.current.play().catch(() => {});
+      }, 0); // 🚀 Joga pro background
     }
   };
 
   const playBackSound = () => {
     if (backSound.current) {
-      backSound.current.currentTime = 0;
-      backSound.current.volume = 1.0;
-      backSound.current.play().catch(() => {});
+      setTimeout(() => {
+        backSound.current.currentTime = 0;
+        backSound.current.volume = 1.0;
+        backSound.current.play().catch(() => {});
+      }, 0); // 🚀 Joga pro background
     }
   };
 
@@ -127,21 +133,38 @@ const [shipDataState, setShipDataState] = useState(null);
 */
   const playPowerUpSound = (startLevel, endLevel) => {
     if (!rechargeSound.current) return;
-    if (soundTimeout.current) clearTimeout(soundTimeout.current);
+    
     const difference = endLevel - startLevel;
     if (difference <= 0) return;
+
+    // As contas matemáticas são rápidas, não travam a tela, ficam fora do timeout
     const startSecond      = startLevel * 0.5;
     const normalDurationMs = difference * 500;
     const desiredDurationMs = 500 + (difference - 1) * 200;
     const speedMultiplier  = normalDurationMs / desiredDurationMs;
-    rechargeSound.current.currentTime  = startSecond;
-    rechargeSound.current.playbackRate = speedMultiplier;
-    rechargeSound.current.volume       = 1.0;
-    rechargeSound.current.play().catch(e => console.warn("Áudio bloqueado", e));
-    soundTimeout.current = setTimeout(() => {
-      rechargeSound.current.pause();
-      rechargeSound.current.playbackRate = 1.0;
-    }, desiredDurationMs);
+
+    // Limpa qualquer som de recarga que estivesse tocando antes
+    if (soundTimeout.current) clearTimeout(soundTimeout.current);
+
+    // 🚀 Joga a ativação do áudio para o background
+    setTimeout(() => {
+      // Confirmação extra de segurança caso o componente tenha desmontado
+      if (!rechargeSound.current) return;
+
+      rechargeSound.current.currentTime  = startSecond;
+      rechargeSound.current.playbackRate = speedMultiplier;
+      rechargeSound.current.volume       = 1.0;
+      
+      rechargeSound.current.play().catch(e => console.warn("Áudio bloqueado", e));
+
+      // Só agora, depois de dar o play, nós programamos a pausa
+      soundTimeout.current = setTimeout(() => {
+        if (rechargeSound.current) {
+          rechargeSound.current.pause();
+          rechargeSound.current.playbackRate = 1.0;
+        }
+      }, desiredDurationMs);
+    }, 0);
   };
 
 
@@ -373,10 +396,24 @@ const shipInfo = shipDataState;
   const playPowerDownSound = (isOutage = false) => {
     const soundToPlay = isOutage ? powerDownOutage.current : powerDownGeneric.current;
     if (!soundToPlay) return;
+
+    // Limpa qualquer timer anterior IMEDIATAMENTE (rápido e não trava a tela)
     if (soundTimeout.current) clearTimeout(soundTimeout.current);
-    soundToPlay.currentTime = 0; soundToPlay.volume = 1.0; soundToPlay.playbackRate = 1.0;
-    soundToPlay.play().catch(() => {});
-    soundTimeout.current = setTimeout(() => { soundToPlay.pause(); }, isOutage ? 1500 : 500);
+
+    // 🚀 Joga toda a manipulação do áudio para o background
+    setTimeout(() => {
+      if (!soundToPlay) return; // Segurança extra
+
+      soundToPlay.currentTime = 0;
+      soundToPlay.volume = 1.0;
+      soundToPlay.playbackRate = 1.0;
+      soundToPlay.play().catch(e => console.warn("Áudio bloqueado:", e));
+
+      // Só agenda a pausa depois que o som já começou a tocar lá no background
+      soundTimeout.current = setTimeout(() => {
+        soundToPlay.pause();
+      }, isOutage ? 1500 : 500);
+    }, 0);
   };
 
   const handleManualSync = async () => {
@@ -457,17 +494,28 @@ const shipInfo = shipDataState;
       }
     }
 
-    const currentWeaponEffect = getEffect(shipInfo.shipClass, attackWeaponType, attributes[attackWeaponType]);
+   const currentWeaponEffect = getEffect(shipInfo.shipClass, attackWeaponType, attributes[attackWeaponType]);
     const isMissileAttack     = attackWeaponType === "missiles";
-    await processPlayerAttack(playerData.ship, attackTarget, attackDamage, isExtremo, currentWeaponEffect, isMissileAttack);
+    
+    // 1. Salve os valores atuais em variáveis locais para não perdê-los quando limpar a tela
+    const damageToApply = attackDamage;
+    const isExtremoDmg = isExtremo;
+    const targetToAttack = attackTarget;
 
-    const updatedShip = await getShipData(playerData.ship);
-    setShipDataState(updatedShip);
-
+    // 2. FECHE O MODAL IMEDIATAMENTE (Isso tira o "lag" visual)
     setShowAttackModal(false);
     setAttackTarget("");
     setAttackDamage("");
     setIsExtremo(false);
+
+    // 3. Envie para o Firebase em background (Note que tiramos o 'await' daqui)
+    processPlayerAttack(playerData.ship, targetToAttack, damageToApply, isExtremoDmg, currentWeaponEffect, isMissileAttack)
+      .then(async () => {
+        // Quando o Firebase terminar, atualiza a nave silenciosamente
+        const updatedShip = await getShipData(playerData.ship);
+        setShipDataState(updatedShip);
+      })
+      .catch(err => console.error("Erro ao processar ataque:", err));
   };
 
   // ADICIONE ASYNC E AWAIT NAS NAVES E NA ATUALIZAÇÃO

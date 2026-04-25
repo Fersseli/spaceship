@@ -513,9 +513,23 @@ const TerminalCombate = ({ onBack }) => {
   useEffect(() => {
     document.body.style.cursor = "url('/normal.cur'), auto";
     refresh();
-    const interval = setInterval(refresh, 5000);
-    return () => { clearInterval(interval); document.body.style.cursor = "default"; };
-  }, []);
+    const unsubShips = onSnapshot(doc(db, "gameData", "ships"), async (docSnap) => {
+    if (docSnap.exists()) {
+      const shipsData = docSnap.data();
+      setAllShips(shipsData);
+      setActiveEnemies(Object.values(shipsData).filter((s) => s.isEnemy && s.status === "ativa"));
+      // Atualize a matriz apenas quando necessário
+      const matrix = await getProximityMatrix();
+      setProxMatrix(matrix);
+      setLastRefresh(new Date());
+    }
+  });
+
+  return () => { 
+    unsubShips(); // Limpa o listener
+    document.body.style.cursor = "default"; 
+  };
+}, []);
 
   useEffect(() => {
     const handlePlayerAttack = (e) => {
