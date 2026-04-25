@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { memo, useState, useEffect, useRef, useCallback } from "react";
 import {
   getAllShips,
   getMaxSpeed,
@@ -12,7 +12,6 @@ import {
   getProximityMatrix,
 } from "../utils/mockApi";
 import "../styles/RadarTatico.css";
-import React, { memo } from 'react';
 
 const proximityLabel = (p) => ["", "CONTATO", "PERTO", "MÉDIO", "LONGE", "LIMITE"][p] ?? "—";
 
