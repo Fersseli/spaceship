@@ -10,7 +10,7 @@ const AdminLogin = ({ onAdminSuccess, onBack }) => {
     e.preventDefault();
 
     // Validação das credenciais de Administrador
-    if (user === "ZERO" && pass === "fernando" || user === "zero" && pass === "fernando") {
+    if (user === "ZERO" && pass === "fernando" || (user === "zero" && pass === "fernando")) {
       setMessage("LOGIN BEM SUCEDIDO. REDIRECIONANDO...");
       
       // Aciona a função de sucesso que vem do LoginScreen após 1 segundo
