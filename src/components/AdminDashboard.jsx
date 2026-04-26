@@ -446,7 +446,14 @@ setProximityMatrix(matrix);
                 <div className="fleet-list">
                   {Object.entries(fleetData)
                     // ADICIONE ESTA LINHA ABAIXO PARA ORDENAR PELO NOME
-                    .sort(([, shipA], [, shipB]) => shipA.name.localeCompare(shipB.name))
+                   .sort(([, shipA], [, shipB]) => {
+                      // 1º Critério: Hostis primeiro, Aliadas por último
+                      if (shipA.isEnemy !== shipB.isEnemy) {
+                        return shipA.isEnemy ? -1 : 1;
+                      }
+                      // 2º Critério: Ordem alfabética pelo nome (caso sejam do mesmo tipo)
+                      return shipA.name.localeCompare(shipB.name);
+                    })
                     .map(([id, ship]) => (
                       <div
                         key={id}

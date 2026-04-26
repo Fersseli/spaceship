@@ -77,11 +77,16 @@ const RadarTatico = ({
     const matrix = await getProximityMatrix();
     setAllShips(ships);
     setProxMatrix(matrix);
+    
     const ps = ships[playerShipId];
     if (ps) setPlayerShip(ps);
-    setEnemies(
-      Object.values(ships).filter((s) => s.isEnemy && s.status === "ativa")
-    );
+    
+    // Filtra os inimigos ativos e já ordena alfabeticamente pelo nome
+    const activeEnemies = Object.values(ships)
+      .filter((s) => s.isEnemy && s.status === "ativa")
+      .sort((a, b) => a.name.localeCompare(b.name));
+      
+    setEnemies(activeEnemies);
   }, [playerShipId]);
 
   useEffect(() => {

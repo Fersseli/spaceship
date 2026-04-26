@@ -20,6 +20,7 @@ import ConfirmModal from "./ConfirmModal";
 import RadarTatico from "./RadarTatico";
 import { db } from "../utils/firebase";
 import { doc, onSnapshot } from "firebase/firestore";
+import ShipLoading from "./ShipLoading"; // Importando o componente de loading
 
 const ShipDashboard = ({ playerData, onLogout }) => {
 
@@ -392,7 +393,7 @@ const [shipDataState, setShipDataState] = useState(null);
   }, [currentRole, playerData.nickname]);
 
   if (!shipDataState || Object.keys(attributes).length === 0) {
-  return <div className="dashboard">Carregando nave...</div>;
+  return <ShipLoading />;
 }
 
 const shipInfo = shipDataState;
