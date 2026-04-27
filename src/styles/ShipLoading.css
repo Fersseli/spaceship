@@ -1,0 +1,85 @@
+/* Container principal - Degradê preto e controle de tela cheia */
+.space-loading-wrapper {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: #030508; /* Fundo espaço profundo */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+  z-index: 9999; /* Fica por cima de tudo */
+}
+
+/* A curvatura do planeta e a luz */
+.planet-horizon-glow {
+  position: absolute;
+  
+  /* O SEGREDO: Largura e altura exatamentes iguais */
+  width: 150vh;  /* Usando a mesma unidade (vh) para ambos */
+  height: 150vh; 
+  
+  border-radius: 50%; /* Agora isso fará um círculo perfeito */
+  
+  /* Como o tamanho mudou, você precisará reajustar o posicionamento */
+  top: -15vh; 
+  right: -50vh; /* Empurra metade do "planeta" para fora da tela */
+  
+  background-color: #000;
+  
+  box-shadow: 
+    -10px 0 40px 5px rgba(255, 255, 255, 0.9),  
+    -30px 0 120px 40px rgba(144, 206, 250, 0.5), 
+    -80px 0 250px 80px rgba(173, 216, 230, 0.15); 
+    
+  pointer-events: none; 
+}
+
+/* Container do Loader */
+.dynamic-loader {
+  display: flex;
+  gap: 12px;
+  z-index: 2; /* Garante que fique acima da luz do planeta */
+}
+
+/* Barras do Loader */
+.loader-bar {
+  width: 8px;
+  height: 40px;
+  border-radius: 4px;
+  /* Animação rápida (0.4s) para dar sensação de agilidade */
+  animation: pulse-wave 0.4s ease-in-out infinite alternate;
+}
+
+/* Aplicação das cores solicitadas e atrasos na animação para o efeito "onda" */
+.color-red {
+  background-color: #c5233b;
+  animation-delay: 0s;
+}
+
+.color-gold {
+  background-color: #dcb164;
+  animation-delay: 0.15s;
+}
+
+.color-orange {
+  background-color: #e5ab6a;
+  animation-delay: 0.3s;
+}
+
+/* Keyframes para o movimento suave de subida e descida */
+@keyframes pulse-wave {
+  0% {
+    transform: translateY(15px) scaleY(0.7);
+    opacity: 0.6;
+    box-shadow: 0 0 0 transparent;
+  }
+  100% {
+    transform: translateY(-15px) scaleY(1.1);
+    opacity: 1;
+    /* Adiciona um leve brilho da própria cor quando atinge o topo */
+    box-shadow: 0 0 10px currentColor; 
+  }
+}

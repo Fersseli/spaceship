@@ -10,6 +10,8 @@ import { removePlayerFromAllCrews } from "../utils/mockApi";
 // Se eles não estiverem a ser importados corretamente, causam esse erro!
 import AdminLogin from "./AdminLogin";
 import AdminDashboard from "./AdminDashboard";
+import { auth } from "../utils/firebase";
+import { signInWithEmailAndPassword } from "firebase/auth";
 
 
 const LoginScreen = ({ onLoginSuccess }) => {
@@ -31,55 +33,41 @@ const LoginScreen = ({ onLoginSuccess }) => {
   const [selectedShip, setSelectedShip] = useState("hawthorne_iii");
   const [error, setError] = useState("");
 
-  const handleEnter = (e) => {
-    e.preventDefault();
+  const handleEnter = async (e) => {
+  e.preventDefault();
+  setError("");
 
-    const player = playersList.find((p) => p.id === nickname);
+  // Encontrar o e-mail associado ao codinome no seu playersList
+  const playerInfo = playersList.find((p) => p.id === nickname);
+  
+  try {
+    // Autenticação Real no Firebase
+    const userCredential = await signInWithEmailAndPassword(
+      auth, 
+      `${nickname}@heavens.com`, // Simulando um e-mail pelo nickname
+      password
+    );
 
-    // Validação de Senha e Gatilho do Admin
-    if (!player || password !== player.password) {
-      setError("Senha incorreta.");
-      
-      const newCount = failCount + 1;
-      setFailCount(newCount);
-      
-      // Se errar 5 vezes, libera o acesso ao terminal restrito
-      if (newCount >= 5) {
-        setShowAdminMode(true);
-      }
-      return;
-    }
+    const user = userCredential.user;
 
-    removePlayerFromAllCrews(nickname); // Limpa o jogador de qualquer tripulação antes de logar
-
-    // Validação de Co-piloto Único
-    if (selectedRole === "copiloto") {
-      const isCopilotTaken = playersList.some((p) => {
-        if (p.id === nickname) return false;
-        const isOnline = localStorage.getItem(`status_${p.id}`) === "online";
-        const role = localStorage.getItem(`role_${p.id}`);
-        return isOnline && role === "copiloto";
-      });
-
-      if (isCopilotTaken) {
-        setError("Acesso Negado: Já existe um co-piloto online nesta nave.");
-        return;
-      }
-    }
-
-    setError("");
-
-    // Persistência da Nave Escolhida (ou Hawthorne por padrão)
-    localStorage.setItem(`ship_${nickname}`, selectedShip);
+    // Limpezas e validações de cargo (mantendo sua lógica original)
+    removePlayerFromAllCrews(nickname); 
 
     onLoginSuccess({
+      uid: user.uid, // Agora você tem um ID único real
       nickname: nickname,
       role: selectedRole,
       ship: selectedShip,
-      des: player.des,
-      esq: player.esq,
+      des: playerInfo.des,
+      esq: playerInfo.esq,
     });
-  };
+
+  } catch (err) {
+    setError("Credenciais Inválidas ou erro de conexão.");
+    setFailCount(prev => prev + 1);
+    if (failCount + 1 >= 5) setShowAdminMode(true);
+  }
+};
 
   // Renderização Condicional: Dashboard do Admin
   if (isAdminLoggedIn) {

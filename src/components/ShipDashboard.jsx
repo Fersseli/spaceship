@@ -353,7 +353,8 @@ const [shipDataState, setShipDataState] = useState(null);
           } else if (data.isAbsorbed) {
             overlayText = "absorvido!"; overlayType = "miss";
           } else if (data.damage > 0) {
-            overlayText = `-${data.damage} HP`; overlayType = "hit";
+            overlayText = `-${data.damage} HP`; 
+            overlayType = data.isPlayerAction ? "damage-dealt" : "hit"; // <- Correção aqui
             if (data.logText) {
               if (data.logText.includes("[MÓDULO:")) { const m = data.logText.match(/\[MÓDULO: (.*?)\]/); if (m) moduleMsg = m[1]; }
               else if (data.logText.includes("[AVARIA:")) { const m = data.logText.match(/\[AVARIA: (.*?)\]/); if (m) moduleMsg = `${m[1]} AVARIADA`; }
