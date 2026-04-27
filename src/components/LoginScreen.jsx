@@ -63,7 +63,7 @@ const LoginScreen = ({ onLoginSuccess }) => {
     });
 
   } catch (err) {
-    setError("Credenciais Inválidas ou erro de conexão.");
+    setError("Credenciais Inválidas");
     setFailCount(prev => prev + 1);
     if (failCount + 1 >= 5) setShowAdminMode(true);
   }

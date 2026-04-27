@@ -193,16 +193,21 @@ const AdminDashboard = ({ onLogout }) => {
   };
   // ────────────────────────────────────────────────────────────────────────────
 
-  // 4. REFRESH DATA AGORA É ASYNC E LÊ TRIPULAÇÃO DA NUVEM
 const refreshData = useCallback(async () => {
-      const allAssignments = await getAllCrewAssignments(); // FIREBASE
+    const allAssignments = await getAllCrewAssignments(); // FIREBASE
+
+    // NOVO: Busca o status online de todos os jogadores no Firestore
+    const statusSnap = await getDoc(doc(db, "gameData", "playersStatus"));
+    const playersStatusDb = statusSnap.exists() ? statusSnap.data() : {};
 
     const rawMappedData = playersList.map((player) => {
-      // Deixamos os status de login do player no localStorage por enquanto
-      const isOnline   = localStorage.getItem(`status_${player.id}`) === "online";
-      const rawRole    = localStorage.getItem(`role_${player.id}`);
+      // NOVO: Puxa os dados do banco em vez do localStorage
+      const pData = playersStatusDb[player.id] || {};
+      
+      const isOnline   = pData.status === "online";
+      const rawRole    = pData.role || "";
       const currentRole = (rawRole === "piloto" || rawRole === "copiloto") ? rawRole : "tripulante";
-      const savedShipId = localStorage.getItem(`ship_${player.id}`) || "hawthorne_iii";
+      const savedShipId = pData.ship || "hawthorne_iii";
       const shipLabel   = shipsList.find(s => s.id === savedShipId)?.label || "MS Hawthorne III";
 
       let assignedFunction = "LIVRE";
@@ -224,10 +229,10 @@ const refreshData = useCallback(async () => {
     });
 
     const dbShips = await getAllShips();
-const matrix = await getProximityMatrix();
+    const matrix = await getProximityMatrix();
 
-setFleetData(dbShips);
-setProximityMatrix(matrix);
+    setFleetData(dbShips);
+    setProximityMatrix(matrix);
 
     const enemyCrewMembers = [];
     Object.values(dbShips).forEach(ship => {
@@ -255,10 +260,20 @@ setProximityMatrix(matrix);
     setSortConfig({ key, direction });
   };
 
-  const handleForceLogout = (playerId) => {
-    localStorage.removeItem(`status_${playerId}`);
-    localStorage.removeItem(`role_${playerId}`);
-    refreshData();
+  const handleForceLogout = async (playerId) => {
+    try {
+      await setDoc(doc(db, "gameData", "playersStatus"), {
+        [playerId]: { status: "offline" }
+      }, { merge: true }); // O merge: true garante que não apague o resto dos dados
+      
+      // Limpa os resquícios locais também por precaução
+      localStorage.removeItem(`status_${playerId}`);
+      localStorage.removeItem(`role_${playerId}`);
+      
+      refreshData();
+    } catch (error) {
+      console.error("Erro ao forçar logout:", error);
+    }
   };
 
   useEffect(() => {

@@ -1,23 +1,22 @@
-import React, { useState, useEffect } from "react"; // Adicionado useEffect
+import React, { useState, useEffect } from "react";
 import "./App.css";
 import LoginScreen from "./components/LoginScreen";
 import ShipDashboard from "./components/ShipDashboard";
 import TerminalCombate from "./components/TerminalCombate";
 
-// Importações do Firebase
-import { auth } from "./utils/firebase"; 
+// Importações do Firebase (Adicionamos o db, doc e setDoc aqui)
+import { auth, db } from "./utils/firebase"; 
 import { onAuthStateChanged, signOut } from "firebase/auth";
+import { doc, setDoc } from "firebase/firestore";
 
 const App = () => {
   const [playerData, setPlayerData] = useState(null);
-  const [loading, setLoading] = useState(true); // Estado para evitar flash da tela de login
+  const [loading, setLoading] = useState(true);
 
   // Monitora o estado de autenticação do Firebase
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
-        // Se o usuário está logado, tentamos recuperar os dados da sessão
-        // Você pode buscar dados adicionais do Firestore aqui se desejar
         const savedData = localStorage.getItem(`session_${user.uid}`);
         if (savedData) {
           setPlayerData(JSON.parse(savedData));
@@ -28,20 +27,42 @@ const App = () => {
       setLoading(false);
     });
 
-    return () => unsubscribe(); // Limpa o listener ao desmontar
+    return () => unsubscribe();
   }, []);
 
-  const handleLoginSuccess = (data) => {
-    // Agora salvamos os dados vinculados ao UID do Firebase para persistência
+  // 1. ATUALIZADO: Agora é async e avisa o Firebase que o jogador entrou
+  const handleLoginSuccess = async (data) => {
     if (auth.currentUser) {
       localStorage.setItem(`session_${auth.currentUser.uid}`, JSON.stringify(data));
     }
+    
+    // REGISTRA STATUS ONLINE
+    try {
+      await setDoc(doc(db, "gameData", "playersStatus"), {
+        [data.nickname]: { 
+          status: "online", 
+          role: data.role, 
+          ship: data.ship 
+        }
+      }, { merge: true });
+    } catch (error) {
+      console.error("Erro ao registrar status online:", error);
+    }
+
     setPlayerData(data);
   };
 
+  // 2. ATUALIZADO: Avisa o Firebase que o jogador saiu antes de deslogar
   const handleLogout = async () => {
     try {
-      await signOut(auth); // Desloga do Firebase de verdade
+      // REGISTRA STATUS OFFLINE
+      if (playerData && playerData.nickname) {
+        await setDoc(doc(db, "gameData", "playersStatus"), {
+          [playerData.nickname]: { status: "offline" }
+        }, { merge: true });
+      }
+
+      await signOut(auth);
       if (playerData) {
         localStorage.removeItem(`session_${auth.currentUser?.uid}`);
       }
@@ -51,7 +72,6 @@ const App = () => {
     }
   };
 
-  // Se estiver carregando o estado do Firebase, exibe uma tela vazia ou loader
   if (loading) return <div className="loading-screen">Iniciando Sistemas...</div>;
 
   if (window.location.pathname === '/terminal-combate') {
