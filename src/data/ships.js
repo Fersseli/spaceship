@@ -21,6 +21,8 @@ export const shipsDatabase = {
     shipClass: "type_III",
     currentHP: 60,
     maxHP: 80,
+    dodgeCharges: 3,
+    pendingAttack: null,
     totalPoints: 14,
     attributes: {
       weapons: 3,
@@ -47,6 +49,8 @@ export const shipsDatabase = {
     shipClass: "type_II",
     currentHP: 60,
     maxHP: 60,
+    dodgeCharges: 3,
+    pendingAttack: null,
     totalPoints: 12,
     attributes: {
       weapons: 0,
@@ -69,7 +73,32 @@ export const shipsDatabase = {
     shipClass: "type_II",
     currentHP: 50,
     maxHP: 70,
-    totalPoints: 14,
+    dodgeCharges: 3,
+    pendingAttack: null,
+    totalPoints: 12,
+    attributes: {
+      weapons: 0,
+      controls: 0,
+      shields: 0,
+      engines: 0
+    },
+    crew: {
+      hasCopiloto: false,
+      torretas: [
+        { id: "centro", label: "Torreta Central", capabilities: ["Tiro"] },
+      ]
+    }
+  },
+
+  swordfish_ii: {
+    id: "swordfish_ii",
+    name: "Swordfish II",
+    shipClass: "type_II",
+    currentHP: 50,
+    maxHP: 50,
+    dodgeCharges: 3,
+    pendingAttack: null,
+    totalPoints: 12,
     attributes: {
       weapons: 0,
       controls: 0,
@@ -90,6 +119,7 @@ export const shipsDatabase = {
 
 export const shipsList = [
   { id: "hawthorne_iii", label: "MS Hawthorne III" },
-  { id: "vanguard_ii",   label: "Vanguard II" },
-  { id: "fusca_ii",      label: "Fusca 2.0" }
+  { id: "vanguard_ii",   label: "RB Vanguard II" },
+  { id: "fusca_ii",      label: "VW Fusca 2.0" },
+  { id: "swordfish_ii",   label: "DL Swordfish II" }
 ];

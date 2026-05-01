@@ -19,6 +19,8 @@ import {
   getProximity, // <-- ADICIONE O GET PROXIMITY AQUI
   resolveEngagement,
   ensureNavigationFields,
+  triggerAttackAlert,
+  buildCombatLog,
 } from "../utils/mockApi";
 import { getEffect } from "../utils/effectHelpers";
 import { rollDamage, parseShield, rollHit } from "../utils/diceHelpers";
@@ -233,11 +235,13 @@ const CrewSlot = ({ member, attackerShip, allShips, proxMatrix, onFire }) => {
               const pxKey = `${s.id}__${attackerShip.id}`;
               const tProx = s.isEnemy ? 3 : (proxMatrix[pxKey] !== undefined ? proxMatrix[pxKey] : 3);
               const tBlocked = !s.isEnemy && getProximityModifiers(tProx).blocked;
+              const waitingReaction = !s.isEnemy && !!s.pendingAttack;
               return (
-                <option key={s.id} value={s.id} disabled={tBlocked}>
+                <option key={s.id} value={s.id} disabled={tBlocked || waitingReaction}>
                   {s.isEnemy ? "[HOSTIL]" : "[ALIADA]"} {s.name}
                   {!s.isEnemy ? ` [P${tProx}]` : ""}
                   {tBlocked ? " 🚫" : ""}
+                  {waitingReaction ? " [AGUARDANDO REAÇÃO...]" : ""}
                 </option>
               );
             })}
@@ -290,11 +294,14 @@ const CrewSlot = ({ member, attackerShip, allShips, proxMatrix, onFire }) => {
 
 const ShipAttributeAdjuster = ({ ship, onUpdate }) => {
   const maxAttrs = getShipMaxAttributes(ship);
-  const attributeOrder = ["weapons", "missiles", "controls", "shields", "engines"];
+  const allAttributeOrder = ["weapons", "missiles", "controls", "shields", "engines"];
+  const attributeOrder = ship.shipClass === "type_II"
+    ? allAttributeOrder.filter(attr => attr !== "missiles")
+    : allAttributeOrder;
 
   const handleLevelChange = async (attr, delta) => {
     const currentAttrs = { ...ship.attributes };
-    const currentTotal = Object.values(currentAttrs).reduce((sum, v) => sum + v, 0);
+    const currentTotal = attributeOrder.reduce((sum, key) => sum + (currentAttrs[key] || 0), 0);
     const currentValue = currentAttrs[attr] || 0;
     const maxAllowed   = maxAttrs[attr];
 
@@ -585,14 +592,22 @@ const TerminalCombate = ({ onBack }) => {
     const proxMods = getProximityModifiers(proximity, attackerShip.isDerrapando);
 
     if (proxMods.blocked) {
-      addLog({ hit: false, text: `🚫 ${attackerShip.name} - ${member.function}: Fora de alcance (P${proximity}). Ataque bloqueado.` });
+      addLog({ hit: false, text: buildCombatLog({
+        origin: `${attackerShip.name} - ${member.function}`,
+        event: "ATAQUE BLOQUEADO",
+        status: `Fora de alcance (P${proximity})`,
+      }) });
       return;
     }
 
     // ── FLUXO DE MÍSSIL ──────────────────────────────────────────────────────
     if (missiles) {
       if (attackerShip.missileCooldown > 0) {
-        addLog({ hit: false, text: `⏳ ${attackerShip.name}: Sistemas de mísseis em recarga (${attackerShip.missileCooldown}t restantes).` });
+        addLog({ hit: false, text: buildCombatLog({
+          origin: attackerShip.name,
+          event: "MÍSSEIS EM RECARGA",
+          status: `${attackerShip.missileCooldown}t restantes`,
+        }) });
         return;
       }
       if (attackerShip.shipClass !== "type_II") {
@@ -604,12 +619,20 @@ const TerminalCombate = ({ onBack }) => {
           // 3. Salva no Firebase no lugar do localStorage
           await setDoc(doc(db, "gameData", "ships"), ships);
           
-          addLog({ hit: false, text: `⚠️ ${attackerShip.name} iniciou travamento de mira de MÍSSIL em ${target.name}!` });
+          addLog({ hit: false, text: buildCombatLog({
+            origin: attackerShip.name,
+            event: "TRAVAMENTO DE MÍSSIL INICIADO",
+            target: target.name,
+          }) });
           refresh();
           return;
         }
         if (!attackerCrewMember.missileReady) {
-          addLog({ hit: false, text: `⏳ ${attackerShip.name}: mira de míssil ainda calculando. Aguarde o Turno Global.` });
+          addLog({ hit: false, text: buildCombatLog({
+            origin: attackerShip.name,
+            event: "MIRA DE MÍSSIL CALCULANDO",
+            status: "Aguarde o Turno Global.",
+          }) });
           return;
         }
       }
@@ -625,7 +648,11 @@ const TerminalCombate = ({ onBack }) => {
         // 4. Salva no Firebase
         await setDoc(doc(db, "gameData", "ships"), ships);
         
-        addLog({ hit: false, text: `🎯 ${attackerShip.name} - ${member.function} iniciou mira balística em ${target.name}!` });
+        addLog({ hit: false, text: buildCombatLog({
+          origin: `${attackerShip.name} - ${member.function}`,
+          event: "MIRA BALÍSTICA INICIADA",
+          target: target.name,
+        }) });
         refresh();
         return;
       }
@@ -636,7 +663,11 @@ const TerminalCombate = ({ onBack }) => {
         // 5. Salva no Firebase
         await setDoc(doc(db, "gameData", "ships"), ships);
         
-        addLog({ hit: false, text: `🎯 ${attackerShip.name} - ${member.function} redirecionou mira balística para ${target.name}!` });
+        addLog({ hit: false, text: buildCombatLog({
+          origin: `${attackerShip.name} - ${member.function}`,
+          event: "MIRA BALÍSTICA REDIRECIONADA",
+          target: target.name,
+        }) });
         refresh();
         return;
       }
@@ -673,16 +704,20 @@ const TerminalCombate = ({ onBack }) => {
 
     if (!acertou) {
       const logRolls = advantageLevel > 1 ? `[${allRolls.join(', ')}] -> ` : '';
-      const msgFalha = [
-        `${member.id} [${weaponLabel} Nv.${attrLevel}: ${effectStr}]${proxLabel}`,
-        `→ ${target.name}`,
-        `| d100: ${logRolls}${rolou}/${precisaoAjustada}% ✗`,
-        `| ERROU O ALVO`
-      ].join("  ");
+      const msgFalha = buildCombatLog({
+        origin: `${member.id} [${weaponLabel} Nv.${attrLevel}: ${effectStr}]${proxLabel}`,
+        event: "DISPARO",
+        target: target.name,
+        status: "ERROU O ALVO",
+        details: `d100: ${logRolls}${rolou}/${precisaoAjustada}% ✗`,
+      });
 
       // 6. Registra o evento de erro no Firebase
       await setDoc(doc(db, "gameData", "lastCombatEvent"), {
-        targetName: target.name, damage: 0, isAbsorbed: false, timestamp: Date.now(), logText: msgFalha
+        targetShipId: targetId,
+        attackerShipId: attackerShip.id,
+        targetName: target.name, damage: 0, isAbsorbed: false, timestamp: Date.now(), logText: msgFalha,
+        isPlayerAction: !attackerShip.isEnemy,
       });
       addLog({ hit: false, text: msgFalha });
 
@@ -702,6 +737,75 @@ const TerminalCombate = ({ onBack }) => {
 
     const { total: rawDamage, isCritico, breakdown } = rollDamage(effectStr, isExtremo);
     const shieldValue = parseShield(getEffect(target.shipClass, "shields", target.attributes.shields));
+
+    if (attackerShip.isEnemy && !target.isEnemy) {
+      const logRolls = advantageLevel > 1 ? `[${allRolls.join(', ')}] -> ` : '';
+      const advantageLabel =
+        advantageLevel === 2 ? " [VANTAGEM]"  :
+        advantageLevel === 3 ? " [DUPLA VTG]" :
+        advantageLevel >= 4  ? " [SUPER VTG]" : "";
+
+      const pendingAttack = await triggerAttackAlert(targetId, {
+        attackerShipId: attackerShip.id,
+        attackerName: attackerShip.name,
+        attackerCrewId: member.id,
+        attackerCrewFunction: member.function,
+        weaponLabel,
+        weaponEffect: effectStr,
+        attrLevel,
+        rawDamage,
+        shieldValue,
+        isCritico,
+        isExtremo,
+        breakdown,
+        proxLabel,
+        advantageLabel,
+        hitRoll: rolou,
+        hitRolls: allRolls,
+        precision: precisaoAjustada,
+        isMissile: missiles,
+      });
+
+      const alertMsg = buildCombatLog({
+        origin: `${member.id} [${weaponLabel} Nv.${attrLevel}: ${effectStr}]${proxLabel}${advantageLabel}`,
+        event: "DISPARO",
+        target: target.name,
+        status: "AGUARDANDO REAÇÃO...",
+        details: `d100: ${logRolls}${rolou}/${precisaoAjustada}% ✓ | Rolou: ${breakdown} = ${rawDamage}`,
+      });
+
+      await setDoc(doc(db, "gameData", "lastCombatEvent"), {
+        targetShipId: targetId,
+        attackerShipId: attackerShip.id,
+        targetName: target.name,
+        damage: 0,
+        isAbsorbed: false,
+        timestamp: pendingAttack?.timestamp || Date.now(),
+        logText: alertMsg,
+        isAttackAlert: true,
+        isPlayerAction: false,
+      });
+      addLog({ hit: false, text: alertMsg });
+
+      const finalShips = await getAllShips();
+      const finalAttackerCrew = finalShips[attackerShip.id]?.activeCrew?.find(m => m.id === member.id);
+      if (finalAttackerCrew) {
+        if (missiles) {
+          finalAttackerCrew.missileLockLevel = 0;
+          finalAttackerCrew.missileTarget = null;
+          finalAttackerCrew.missileReady = false;
+          finalShips[attackerShip.id].missileCooldown = 2;
+        } else if (hasBallistic) {
+          finalAttackerCrew.ballisticLockLevel = 0;
+          finalAttackerCrew.ballisticTarget = null;
+        }
+        await setDoc(doc(db, "gameData", "ships"), finalShips);
+      }
+
+      refresh();
+      return;
+    }
+
     const finalDamage = Math.max(0, rawDamage - shieldValue);
 
     const newHP = Math.max(0, target.currentHP - finalDamage);
@@ -792,23 +896,23 @@ const TerminalCombate = ({ onBack }) => {
       advantageLevel === 3 ? " [DUPLA VTG]" :
       advantageLevel >= 4  ? " [SUPER VTG]" : "";
 
-    const msg = [
-      `${member.id} [${weaponLabel} Nv.${attrLevel}: ${effectStr}]${proxLabel}${advantageLabel}`,
-      `→ ${target.name}`,
-      `| d100: ${logRolls}${rolou}/${precisaoAjustada}% ✓`,
-      `| Rolou: ${breakdown} = ${rawDamage}`,
-      `| Escudo: -${shieldValue}`,
-      `| Dano: ${finalDamage} HP`,
-      `| HP: ${newHP}/${target.maxHP}`,
-      ...tags,
-      ...(moduleTag ? [moduleTag] : []),
-    ].join("  ");
+    const msg = buildCombatLog({
+      origin: `${member.id} [${weaponLabel} Nv.${attrLevel}: ${effectStr}]${proxLabel}${advantageLabel}`,
+      event: "DISPARO",
+      target: target.name,
+      status: `Dano: ${finalDamage} HP`,
+      details: `d100: ${logRolls}${rolou}/${precisaoAjustada}% ✓ | Rolou: ${breakdown} = ${rawDamage} | Escudo: -${shieldValue} | HP: ${newHP}/${target.maxHP}`,
+      tags: [...tags, ...(moduleTag ? [moduleTag] : [])],
+    });
 
     // 11. Registra o evento de dano final no log global do Firebase
     await setDoc(doc(db, "gameData", "lastCombatEvent"), {
+      targetShipId: targetId,
+      attackerShipId: attackerShip.id,
       targetName: target.name, damage: finalDamage,
       isAbsorbed: rawDamage > 0 && finalDamage === 0,
       timestamp: Date.now(), logText: msg,
+      isPlayerAction: !attackerShip.isEnemy,
       shieldHit: isShieldHit,
       shieldDestroyed: moduleTag.includes("DESTRUÍDOS") && isShieldHit,
       enginesHit: isEnginesHit,
@@ -870,8 +974,17 @@ const TerminalCombate = ({ onBack }) => {
 
     const reparos = await processGlobalTurn(); // <-- AWAIT AQUI
     if (reparos.length > 0) {
-      reparos.forEach(msg => addLog({ hit: false, text: `🔧 ${msg}` }));
-      const fullMsg = `🔧 ` + reparos.join(" | 🔧 ");
+      reparos.forEach(msg => addLog({ hit: false, text: buildCombatLog({
+        origin: "Sistema",
+        event: "TURNO GLOBAL",
+        status: msg,
+      }) }));
+      const fullMsg = buildCombatLog({
+        origin: "Sistema",
+        event: "TURNO GLOBAL",
+        details: reparos.join(" | "),
+        tags: ["[REPARO]"],
+      });
       const repairEvent = {
         targetName: "Sistema", damage: 0, isAbsorbed: false, isRepair: true,
         timestamp: Date.now(), logText: fullMsg

@@ -8,7 +8,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
-const ShipRadarChart = ({ attributes }) => {
+const ShipRadarChart = ({ attributes, shipClass }) => {
   // Mapeia as chaves do seu estado para os rótulos curtos do gráfico
   const nameMap = {
     weapons: "ARM",
@@ -23,7 +23,9 @@ const ShipRadarChart = ({ attributes }) => {
 // const data = Object.entries(attributes).map(([key, value]) => ({ ... }));
 
 // Por isso:
-const fixedOrder = ["weapons", "missiles", "controls", "shields", "engines"];
+const fixedOrder = shipClass === "type_II"
+  ? ["weapons", "controls", "shields", "engines"]
+  : ["weapons", "missiles", "controls", "shields", "engines"];
 
 const data = fixedOrder.map(key => ({
   subject: nameMap[key] || key.toUpperCase(),

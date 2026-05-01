@@ -13,7 +13,8 @@ import {
   getAllShips,
   processPlayerAttack,
   updateShipConfig,
-  getShipMaxAttributes
+  getShipMaxAttributes,
+  resolveDodge
 } from "../utils/mockApi";
 import DexterityRanking from "./Destreza";
 import ConfirmModal from "./ConfirmModal";
@@ -38,6 +39,8 @@ const [shipDataState, setShipDataState] = useState(null);
   const [allShipsList, setAllShipsList] = useState([]);
   /*const [combatJournal, setCombatJournal] = useState([]);*/
   const [currentRole, setCurrentRole] = useState(playerData.role);
+  const [dodgePhase, setDodgePhase] = useState("choice");
+  const [dodgeTimeLeft, setDodgeTimeLeft] = useState(15);
 
   const [confirmState, setConfirmState] = useState({
     isOpen: false, title: "", message: "", subtext: "",
@@ -63,9 +66,11 @@ const [shipDataState, setShipDataState] = useState(null);
   const backSound        = useRef(new Audio('/backb.mp3'));
   const failSound        = useRef(new Audio('/failship.wav'));
   const sonarSound       = useRef(new Audio('/sonar.mp3')); // <--- ADICIONE ESTA LINHA
+  const dodgeAlertSound  = useRef(new Audio('/mira.wav'));
   const mountTime = useRef(Date.now()); 
   const prevEnemiesRef = useRef([]);
   const isFirstLoad = useRef(true);
+  const resolvingDodgeRef = useRef(false);
 
   const playFailSound = () => {
     if (failSound.current) {
@@ -301,6 +306,15 @@ const [shipDataState, setShipDataState] = useState(null);
 
   // Escutador em Tempo Real do Firebase
   useEffect(() => {
+    const currentShipId = playerData.ship;
+    const isCombatEventForThisShip = (data) => {
+      if (!data || !currentShipId) return false;
+      if (data.targetShipId || data.attackerShipId) {
+        return data.targetShipId === currentShipId || data.attackerShipId === currentShipId;
+      }
+      return false;
+    };
+
     // 1. Escuta as atualizações das Naves
     const unsubShips = onSnapshot(doc(db, "gameData", "ships"), (docSnap) => {
   if (docSnap.exists()) {
@@ -343,6 +357,7 @@ const [shipDataState, setShipDataState] = useState(null);
         
         // Só processa se for um tiro NOVO (depois que o jogador logou)
         if (data.timestamp > mountTime.current) {
+          if (!isCombatEventForThisShip(data)) return;
           mountTime.current = data.timestamp;
 
           let overlayText = "", overlayType = "hit";
@@ -393,13 +408,71 @@ const [shipDataState, setShipDataState] = useState(null);
     return () => clearInterval(interval);
   }, [currentRole, playerData.nickname]);
 
+  const activePendingAttackId = shipDataState?.pendingAttack?.id;
+  const hasPilotPendingAttack = !!shipDataState?.pendingAttack && currentRole === "piloto";
+
+  useEffect(() => {
+    if (hasPilotPendingAttack) {
+      setDodgePhase("choice");
+      setDodgeTimeLeft(15);
+      resolvingDodgeRef.current = false;
+
+      if (dodgeAlertSound.current) {
+        dodgeAlertSound.current.loop = true;
+        dodgeAlertSound.current.currentTime = 0;
+        dodgeAlertSound.current.volume = 1.0;
+        dodgeAlertSound.current.play().catch(() => {});
+      }
+    } else if (dodgeAlertSound.current) {
+      dodgeAlertSound.current.pause();
+      dodgeAlertSound.current.currentTime = 0;
+      resolvingDodgeRef.current = false;
+    }
+  }, [activePendingAttackId, hasPilotPendingAttack]);
+
+  useEffect(() => {
+    if (!hasPilotPendingAttack || dodgePhase !== "choice") return;
+
+    const interval = setInterval(() => {
+      setDodgeTimeLeft(prev => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          if (!resolvingDodgeRef.current) {
+            resolvingDodgeRef.current = true;
+            resolveDodge(playerData.ship, "timer_expirou").catch(console.error);
+          }
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [activePendingAttackId, hasPilotPendingAttack, dodgePhase, playerData.ship]);
+
   if (!shipDataState || Object.keys(attributes).length === 0) {
   return <ShipLoading />;
 }
 
 const shipInfo = shipDataState;
-  
-  const remainingPoints = calculateRemainingPoints(attributes, shipInfo.totalPoints);
+  const attrNamesByKey = { weapons: "Armas", missiles: "Mísseis", controls: "Controles", shields: "Escudos", engines: "Motores" };
+  const attrShortByKey = { weapons: "ARM", missiles: "MSL", controls: "CON", shields: "ESC", engines: "MOT" };
+  const allAttributeOrder = ["weapons", "missiles", "controls", "shields", "engines"];
+  const hasMissileSystems = shipInfo.shipClass !== "type_II";
+  const visibleAttributeOrder = hasMissileSystems ? allAttributeOrder : allAttributeOrder.filter(attr => attr !== "missiles");
+  const visibleAttributes = visibleAttributeOrder.reduce((acc, attr) => ({ ...acc, [attr]: attributes[attr] || 0 }), {});
+  const remainingPoints = calculateRemainingPoints(visibleAttributes, shipInfo.totalPoints);
+  const pendingAttack = currentRole === "piloto" ? shipInfo.pendingAttack : null;
+  const dodgeCharges = shipInfo.dodgeCharges ?? 3;
+  const canAttemptDodge = dodgeCharges > 0;
+  const dodgeProgress = Math.max(0, Math.min(100, (dodgeTimeLeft / 15) * 100));
+  const isExtremeIncomingShot = !!pendingAttack?.isExtremo;
+
+  const handleResolveDodge = async (result) => {
+    if (resolvingDodgeRef.current) return;
+    resolvingDodgeRef.current = true;
+    await resolveDodge(playerData.ship, result);
+  };
 
   const playPowerDownSound = (isOutage = false) => {
     const soundToPlay = isOutage ? powerDownOutage.current : powerDownGeneric.current;
@@ -447,6 +520,10 @@ const shipInfo = shipDataState;
 
   const handleConfirmAttack =  async () => {
     if (!attackTarget) return;
+    if (attackWeaponType === "missiles" && !hasMissileSystems) {
+      setAttackWeaponType("weapons");
+      return;
+    }
 
     if (attackWeaponType === "missiles" && shipInfo.missileCooldown > 0) {
       showConfirm({
@@ -604,6 +681,9 @@ const shipInfo = shipDataState;
   const attrNames = { weapons: "Armas", missiles: "Mísseis", controls: "Controles", shields: "Escudos", engines: "Motores" };
   const attrShort = { weapons: "ARM", missiles: "MSL", controls: "CON", shields: "ESC", engines: "MOT" };
   const attributeOrder = ["weapons", "missiles", "controls", "shields", "engines"];
+  void attrNames;
+  void attrShort;
+  void attributeOrder;
 
   const targetShip = allShipsList.find(s => s.id === attackTarget);
   const isCurrentlyAiming = attackWeaponType === "missiles" && centerTurret && centerTurret.missileTarget;
@@ -654,11 +734,11 @@ const shipInfo = shipDataState;
         <main className="dashboard-main">
           <section className="attributes-list">
             <h2>Atributos</h2>
-            {attributeOrder.map((name) => {
+            {visibleAttributeOrder.map((name) => {
               const value = attributes[name] || 0;
               return (
                 <div className="attribute-item" key={name}>
-                  <div className="attribute-item-name">{attrNames[name]}</div>
+                  <div className="attribute-item-name">{attrNamesByKey[name]}</div>
                   <div className="attribute-item-value">
                     <span>[ {value} ]</span>
                     <span>{getEffect(shipInfo.shipClass, name, value)}</span>
@@ -674,11 +754,11 @@ const shipInfo = shipDataState;
               <p>Sistema de Distribuição de Pontos</p>
             </div>
             <div className="control-grid">
-              {attributeOrder.map((name) => {
+              {visibleAttributeOrder.map((name) => {
                 const value = attributes[name] || 0;
                 return (
                   <div key={name} className="control-slot">
-                    <div className="control-slot-label">{attrShort[name]}</div>
+                    <div className="control-slot-label">{attrShortByKey[name]}</div>
                     <div className="control-slot-bars">{renderBars(name, value)}</div>
 
                     {/* ─── BOLINHAS DE AVARIA DOS ESCUDOS ─────────────────── */}
@@ -720,7 +800,7 @@ const shipInfo = shipDataState;
             <div className="ship-display">
               {(() => {
                 const TOTAL_SELECTABLE_POINTS = shipInfo.totalPoints;
-                const pointsUsed = Object.values(attributes).reduce((sum, val) => sum + val, 0);
+                const pointsUsed = Object.values(visibleAttributes).reduce((sum, val) => sum + val, 0);
                 return (
                   <>
                     <div className="point-selector-grid">
@@ -771,8 +851,20 @@ const shipInfo = shipDataState;
                   <div className="hp-bar-fill" style={{ width: `${(shipInfo.currentHP / shipInfo.maxHP) * 100}%` }} />
                 </div>
               </div>
+              <div className="thruster-panel">
+                <div className="thruster-label">PROPULSORES</div>
+                <div className="thruster-led-row">
+                  {Array.from({ length: 3 }).map((_, idx) => (
+                    <span
+                      key={idx}
+                      className={`thruster-led ${idx < dodgeCharges ? "active" : "spent"}`}
+                      title={`Carga ${idx + 1}`}
+                    />
+                  ))}
+                </div>
+              </div>
               <div className="radar-container" style={{ height: "250px", marginTop: "20px" }}>
-                <ShipRadarChart attributes={attributes} />
+                <ShipRadarChart attributes={attributes} shipClass={shipInfo.shipClass} />
               </div>
             </div>
             <div className="remaining-points-box">
@@ -815,6 +907,83 @@ const shipInfo = shipDataState;
         </>
       )}
 
+      {pendingAttack && (
+        <div className="dodge-emergency-overlay">
+          {isExtremeIncomingShot && (
+            <div className="dodge-extreme-banner">
+              <div>TIRO EXTREMO!</div>
+              <span>dificuldade extra em esquivar!</span>
+            </div>
+          )}
+          <div className="dodge-emergency-modal">
+            <div className="dodge-emergency-scanline" />
+            <div className="dodge-emergency-header">
+              <div className="dodge-emergency-dot" />
+              <div>
+                <div className="dodge-emergency-eyebrow">ALERTA DE IMPACTO // PILOTO</div>
+                <h2 className="dodge-emergency-title">Manobra Evasiva</h2>
+              </div>
+            </div>
+
+            <div className="dodge-emergency-body">
+              <div className="dodge-attack-summary">
+                <span>{pendingAttack.attackerName || "Hostil"}</span>
+                <strong>{pendingAttack.rawDamage ?? pendingAttack.damage ?? 0} DANO</strong>
+              </div>
+
+              {dodgePhase === "choice" ? (
+                <>
+                  <div className="dodge-timer-row">
+                    <span>JANELA DE REAÇÃO</span>
+                    <strong>{dodgeTimeLeft}s</strong>
+                  </div>
+                  <div className="dodge-timer-track">
+                    <div className="dodge-timer-fill" style={{ width: `${dodgeProgress}%` }} />
+                  </div>
+
+                  <div className="dodge-actions">
+                    <button
+                      className="dodge-action-btn dodge-action-btn--primary"
+                      disabled={!canAttemptDodge}
+                      onClick={() => setDodgePhase("roll")}
+                    >
+                      TENTAR ESQUIVA
+                    </button>
+                    <button
+                      className="dodge-action-btn"
+                      onClick={() => handleResolveDodge("aceitar")}
+                    >
+                      ACEITAR DANO
+                    </button>
+                  </div>
+                  {!canAttemptDodge && (
+                    <div className="dodge-no-charges">PROPULSORES ESGOTADOS</div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="dodge-roll-callout">Informe o resultado do dado físico</div>
+                  <div className={`dodge-result-grid ${isExtremeIncomingShot ? "is-extreme-shot" : ""}`}>
+                    {isExtremeIncomingShot ? (
+                      <>
+                        <button className="dodge-result-btn fail" onClick={() => handleResolveDodge("falha")}>FALHA</button>
+                        <button className="dodge-result-btn extreme" onClick={() => handleResolveDodge("extremo")}>EXTREMO</button>
+                      </>
+                    ) : (
+                      <>
+                        <button className="dodge-result-btn extreme" onClick={() => handleResolveDodge("extremo")}>EXTREMO</button>
+                      <button className="dodge-result-btn success" onClick={() => handleResolveDodge("sucesso")}>SUCESSO</button>
+                        <button className="dodge-result-btn fail" onClick={() => handleResolveDodge("falha")}>FALHA</button>
+                      </>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODAL DE ATAQUE */}
       {showAttackModal && (
         <div className="assign-overlay" onClick={() => { playBackSound(); setShowAttackModal(false); }}>
@@ -831,7 +1000,7 @@ const shipInfo = shipDataState;
               <button className="attack-modal__close" onClick={() => { playBackSound(); setShowAttackModal(false); }}>×</button>
             </div>
 
-            <div className="attack-modal__weapon-row">
+            <div className={`attack-modal__weapon-row ${!hasMissileSystems ? "single" : ""}`}>
               <button
                 className={`attack-modal__weapon-btn ${attackWeaponType === "weapons" ? "active" : ""}`}
                 onClick={() => setAttackWeaponType("weapons")}
@@ -841,6 +1010,7 @@ const shipInfo = shipDataState;
                 <span className="attack-modal__weapon-dmg">{getEffect(shipInfo.shipClass, "weapons", attributes["weapons"])}</span>
               </button>
 
+              {hasMissileSystems && (
               <button
                 className={`attack-modal__weapon-btn ${attackWeaponType === "missiles" ? "active" : ""} ${shipInfo.missileCooldown > 0 ? "cooldown" : ""}`}
                 onClick={() => setAttackWeaponType("missiles")}
@@ -857,9 +1027,10 @@ const shipInfo = shipDataState;
                 </div>
                 <span className="attack-modal__weapon-dmg">{getEffect(shipInfo.shipClass, "missiles", attributes["missiles"])}</span>
               </button>
+              )}
             </div>
 
-            {attackWeaponType === "missiles" && lockLevel >= 2 && (
+            {hasMissileSystems && attackWeaponType === "missiles" && lockLevel >= 2 && (
               <div className="attack-modal__advantage-alert">
                 {lockLevel === 2 ? "VANTAGEM: ROLE 2d100" : "SUPER VANTAGEM: ROLE 3d100"} E USE O MENOR VALOR!
               </div>

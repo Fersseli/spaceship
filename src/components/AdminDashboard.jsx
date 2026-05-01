@@ -17,6 +17,7 @@ import {
   enforceAttributeLimits, 
   repairShieldByAdmin, 
   repairEnginesByAdmin,
+  resetDodgeCharges,
   getAllCrewAssignments, getProximityMatrix // <-- NOVA FUNÇÃO IMPORTADA
 } from "../utils/mockApi";
 import TerminalCombate from "./TerminalCombate";
@@ -314,7 +315,7 @@ const refreshData = useCallback(async () => {
                   style={{ background: 'rgba(42, 255, 140, 0.1)', color: '#2aff8c', border: '1px solid #2aff8c', margin: 0, padding: '0.5rem 1rem', fontSize: '0.7rem' }}
                   onClick={() => showConfirm({
                     title: "REPARO GLOBAL",
-                    message: "Restaurar integridade estrutural e módulos de TODAS as naves da frota?",
+                    message: "Restaurar integridade estrutural, módulos e propulsores de TODAS as naves da frota?",
                     subtext: "OPERAÇÃO IRREVERSÍVEL — AFETA TODOS OS REGISTROS",
                     variant: "success", confirmLabel: "EXECUTAR REPARO",
                     onConfirm: async () => { 
@@ -551,6 +552,24 @@ const refreshData = useCallback(async () => {
                         className="fleet-input highlight-input"
                       />
                     </div>
+                    {!fleetData[selectedShipId]?.isEnemy && (
+                      <div className="fleet-form-group" style={{ padding: '0.8rem', background: 'rgba(42,255,140,0.06)', border: '1px solid rgba(42,255,140,0.25)' }}>
+                        <label style={{ color: '#2aff8c' }}>
+                          PROPULSORES ({fleetData[selectedShipId]?.dodgeCharges ?? 3}/3)
+                        </label>
+                        <button
+                          className="fleet-save-btn"
+                          style={{ marginTop: '0.3rem', padding: '0.8rem', background: 'rgba(42,255,140,0.12)', color: '#2aff8c', border: '1px solid #2aff8c' }}
+                          onClick={async () => {
+                            await resetDodgeCharges(selectedShipId);
+                            setFleetData(await getAllShips());
+                            refreshData();
+                          }}
+                        >
+                          REGENERAR PROPULSORES (3/3)
+                        </button>
+                      </div>
+                    )}
                     <button className="fleet-save-btn" onClick={handleSaveShip}>SALVAR ESPECIFICAÇÕES</button>
                   </div>
                 )}
@@ -696,7 +715,26 @@ const refreshData = useCallback(async () => {
                         />
                       </div>
                     </div>
-                      
+                    {!alterDraft.isEnemy && (
+                      <div style={{ marginBottom: '0.5rem', padding: '0.3rem', background: 'rgba(42,255,140,0.06)', border: '1px solid rgba(42,255,140,0.25)' }}>
+                        <label style={{ color: '#2aff8c', fontWeight: 'bold', fontSize: '0.7rem' }}>
+                          PROPULSORES ({alterDraft.dodgeCharges ?? 3}/3)
+                        </label>
+                        <button
+                          className="fleet-save-btn"
+                          style={{ marginTop: '0.4rem', width: '100%', padding: '0.45rem', fontSize: '0.7rem', background: 'rgba(42,255,140,0.12)', color: '#2aff8c', border: '1px solid #2aff8c' }}
+                          onClick={async () => {
+                            await resetDodgeCharges(alterDraft.id);
+                            setAlterDraft({ ...alterDraft, dodgeCharges: 3, pendingAttack: null, reactionStatus: null });
+                            setFleetData(await getAllShips());
+                            refreshData();
+                          }}
+                        >
+                          REGENERAR PROPULSORES (3/3)
+                        </button>
+                      </div>
+                    )}
+
                       {/* --- COMPONENTE DA MATRIZ DE PROXIMIDADE ADICIONADO AQUI --- */}
               <div style={{ marginBottom: '2rem' }}>
                 <ProximityMatrixPanel 

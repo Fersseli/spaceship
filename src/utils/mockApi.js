@@ -18,6 +18,15 @@ const DB_VERSION_KEY = "heavens_door_ships_db_version";
 
 const PROX_KEY = "heavens_door_proximity_matrix";
 
+export const buildCombatLog = ({ origin, event, target, status, details, tags = [] }) => {
+  let log = `[${origin}] ${event}`;
+  if (target) log += ` -> [${target}]`;
+  if (status) log += ` | ${status}`;
+  if (details) log += ` | ${details}`;
+  if (tags.length > 0) log += ` | ${tags.join(" ")}`;
+  return log;
+};
+
 export const getProximityMatrix = async () => {
   const docSnap = await getDoc(doc(db, "gameData", "proximityMatrix"));
   return docSnap.exists() ? docSnap.data() : {};
@@ -121,6 +130,11 @@ export const ensureNavigationFields = (ship) => {
   if (!ship) return;
   if (ship.currentSpeed === undefined) ship.currentSpeed = 0;
   if (ship.isDerrapando === undefined) ship.isDerrapando = false;
+  if (!ship.isEnemy) {
+    if (ship.dodgeCharges === undefined) ship.dodgeCharges = 3;
+    if (ship.pendingAttack === undefined) ship.pendingAttack = null;
+    if (ship.reactionStatus === undefined) ship.reactionStatus = null;
+  }
   // proximity agora é gerenciado pela matriz, mas mantemos o campo
   // no objeto inimigo para compatibilidade com código legado no Terminal
   // (será sincronizado via getProximity)
@@ -295,6 +309,17 @@ export const getAllShips = async () => {
       return shipsDatabase;
     }
 
+    let changed = false;
+    Object.values(data).forEach(ship => {
+      const before = JSON.stringify(ship);
+      ensureNavigationFields(ship);
+      if (JSON.stringify(ship) !== before) changed = true;
+    });
+
+    if (changed) {
+      await setDoc(docRef, data);
+    }
+
     return data;
   }
 
@@ -309,6 +334,7 @@ export const getAllShips = async () => {
 export const getShipMaxAttributes = (ship) => {
   const maxAttrs = { weapons: 6, missiles: 6, controls: 6, shields: 6, engines: 6 };
   if (!ship) return maxAttrs;
+  if (ship.shipClass === "type_II") maxAttrs.missiles = 0;
   if (ship.activeCrew && ship.activeCrew.length > 0) {
     if (ship.shipClass === "type_III") {
       const left   = ship.activeCrew.find(m => m.function && m.function.includes("ESQUERDA"));
@@ -345,6 +371,268 @@ export const enforceAttributeLimits = (ship) => {
   return changed;
 };
 
+const applyPendingAttackDamageInternal = (ship, pendingAttack) => {
+  const rawDamage = parseInt(pendingAttack?.rawDamage ?? pendingAttack?.damage ?? 0, 10);
+  const shieldValue = pendingAttack?.shieldValue !== undefined
+    ? parseInt(pendingAttack.shieldValue || 0, 10)
+    : parseShield(getEffect(ship.shipClass, "shields", ship.attributes?.shields ?? 0));
+  const finalDamage = Math.max(0, rawDamage - shieldValue);
+
+  ship.currentHP = Math.max(0, (ship.currentHP ?? ship.maxHP) - finalDamage);
+
+  let moduleTag = "";
+  let isShieldHit = false;
+  let isEnginesHit = false;
+
+  if ((pendingAttack?.isCritico || pendingAttack?.isExtremo) && finalDamage > 0) {
+    const dmgTarget = selectDamageTarget(ship);
+    if (dmgTarget) {
+      if (dmgTarget.tipo === 'torreta') {
+        const member = (ship.activeCrew || []).find(m => m.id === dmgTarget.memberId);
+        if (member) {
+          if (member.moduleStatus === 'operacional') {
+            member.moduleStatus = 'avariada';
+            member.turnosParaReparo = 2;
+            moduleTag = `[AVARIA: ${member.function}]`;
+          } else if (member.moduleStatus === 'avariada') {
+            member.moduleStatus = 'destruida';
+            member.turnosParaReparo = 0;
+            moduleTag = `[MÓDULO DESTRUÍDO: ${member.function}]`;
+          }
+        }
+      } else if (dmgTarget.tipo === 'escudo') {
+        isShieldHit = true;
+        moduleTag = `[ESCUDO: ${applyShieldDamageInternal(ship)}]`;
+      } else if (dmgTarget.tipo === 'motores') {
+        isEnginesHit = true;
+        moduleTag = `[MOTORES: ${applyEnginesDamageInternal(ship)}]`;
+      }
+    }
+  }
+
+  enforceAttributeLimits(ship);
+
+  return {
+    rawDamage,
+    shieldValue,
+    finalDamage,
+    moduleTag,
+    isShieldHit,
+    isEnginesHit,
+  };
+};
+
+export const triggerAttackAlert = async (targetShipId, damageData) => {
+  const ships = await getAllShips();
+  const target = ships[targetShipId];
+  if (!target || target.isEnemy) return null;
+
+  ensureNavigationFields(target);
+  const timestamp = Date.now();
+  target.pendingAttack = {
+    id: `${targetShipId}_${timestamp}`,
+    timestamp,
+    ...damageData,
+  };
+  target.reactionStatus = "AGUARDANDO REAÇÃO...";
+
+  await setDoc(doc(db, "gameData", "ships"), ships);
+  return target.pendingAttack;
+};
+
+export const resetDodgeCharges = async (shipId) => {
+  const ships = await getAllShips();
+  const ship = ships[shipId];
+  if (!ship || ship.isEnemy) return null;
+
+  ensureNavigationFields(ship);
+  ship.dodgeCharges = 3;
+  ship.pendingAttack = null;
+  ship.reactionStatus = null;
+
+  await setDoc(doc(db, "gameData", "ships"), ships);
+  return ship.dodgeCharges;
+};
+
+export const resolveDodge = async (shipId, result) => {
+  const ships = await getAllShips();
+  const ship = ships[shipId];
+  if (!ship || ship.isEnemy || !ship.pendingAttack) return null;
+
+  ensureNavigationFields(ship);
+  const pending = ship.pendingAttack;
+  const normalizedResult = result === "timer_expirou" ? "timer_expirou" : result;
+  const effectiveResult = pending.isExtremo && normalizedResult === "sucesso" ? "falha" : normalizedResult;
+  const spentCharge = effectiveResult === "sucesso" || effectiveResult === "falha";
+  let damageResult = {
+    rawDamage: parseInt(pending.rawDamage ?? pending.damage ?? 0, 10),
+    shieldValue: pending.shieldValue ?? parseShield(getEffect(ship.shipClass, "shields", ship.attributes?.shields ?? 0)),
+    finalDamage: 0,
+    moduleTag: "",
+    isShieldHit: false,
+    isEnginesHit: false,
+  };
+  let logText = "";
+
+  if (effectiveResult === "extremo") {
+    logText = buildCombatLog({
+      origin: ship.name,
+      event: "MANOBRA EXTREMA",
+      status: "Dano evitado sem gasto de propulsores.",
+    });
+  } else if (effectiveResult === "sucesso") {
+    ship.dodgeCharges = Math.max(0, (ship.dodgeCharges ?? 3) - 1);
+    logText = buildCombatLog({
+      origin: ship.name,
+      event: "MANOBRA EVASIVA",
+      status: "Dano evitado.",
+      details: `Propulsores: ${ship.dodgeCharges}/3`,
+    });
+  } else {
+    if (spentCharge) ship.dodgeCharges = Math.max(0, (ship.dodgeCharges ?? 3) - 1);
+    damageResult = applyPendingAttackDamageInternal(ship, pending);
+    const impactDetails = `Dano rolado: ${damageResult.rawDamage} | Escudo: -${damageResult.shieldValue} | Dano: ${damageResult.finalDamage} HP | HP: ${ship.currentHP}/${ship.maxHP}`;
+    const dodgeTags = [
+      ...(damageResult.moduleTag ? [damageResult.moduleTag] : []),
+      ...(pending.isExtremo ? ["[EXTREMO!]"] : pending.isCritico ? ["[CRÍTICO!]"] : []),
+    ];
+    if (effectiveResult === "falha") {
+      logText = buildCombatLog({
+        origin: ship.name,
+        event: "FALHA NA ESQUIVA",
+        status: "Recebeu o impacto direto!",
+        details: impactDetails,
+        tags: dodgeTags,
+      });
+    } else if (effectiveResult === "timer_expirou") {
+      logText = buildCombatLog({
+        origin: ship.name,
+        event: "JANELA DE REAÇÃO EXPIRADA",
+        status: "Recebeu o impacto!",
+        details: impactDetails,
+        tags: dodgeTags,
+      });
+    } else {
+      logText = buildCombatLog({
+        origin: ship.name,
+        event: "DANO ACEITO",
+        status: "Recebeu o impacto!",
+        details: impactDetails,
+        tags: dodgeTags,
+      });
+    }
+  }
+  
+  if (effectiveResult === "extremo") {
+    logText = buildCombatLog({
+      origin: ship.name,
+      event: "MANOBRA EXTREMA",
+      status: "Dano evitado sem gasto de propulsores.",
+    });
+  } else if (effectiveResult === "sucesso") {
+    logText = buildCombatLog({
+      origin: ship.name,
+      event: "MANOBRA EVASIVA",
+      status: "Dano evitado.",
+      details: `Propulsores: ${ship.dodgeCharges}/3`,
+    });
+  } else {
+    const impactDetails = `Dano rolado: ${damageResult.rawDamage} | Escudo: -${damageResult.shieldValue} | Dano: ${damageResult.finalDamage} HP | HP: ${ship.currentHP}/${ship.maxHP}`;
+    const dodgeTags = [
+      ...(damageResult.moduleTag ? [damageResult.moduleTag] : []),
+      ...(pending.isExtremo ? ["[EXTREMO!]"] : pending.isCritico ? ["[CRÍTICO!]"] : []),
+    ];
+    logText = buildCombatLog({
+      origin: ship.name,
+      event: effectiveResult === "falha"
+        ? "FALHA NA ESQUIVA"
+        : effectiveResult === "timer_expirou"
+          ? "JANELA DE REAÇÃO EXPIRADA"
+          : "DANO ACEITO",
+      status: effectiveResult === "falha" ? "Recebeu o impacto direto!" : "Recebeu o impacto!",
+      details: impactDetails,
+      tags: dodgeTags,
+    });
+  }
+
+  const incomingHitRolls = Array.isArray(pending.hitRolls) ? pending.hitRolls : [];
+  const incomingChosenRoll = pending.hitRoll ?? incomingHitRolls[0];
+  const incomingHitDetails = incomingChosenRoll === undefined
+    ? ""
+    : `d100: ${incomingHitRolls.length > 1 ? `[${incomingHitRolls.join(", ")}] -> ` : ""}${incomingChosenRoll}${pending.precision !== undefined ? `/${pending.precision}%` : ""}`;
+
+  if (incomingHitDetails) {
+    if (effectiveResult === "extremo") {
+      logText = buildCombatLog({
+        origin: ship.name,
+        event: "MANOBRA EXTREMA",
+        status: "Dano evitado sem gasto de propulsores.",
+        details: incomingHitDetails,
+      });
+    } else if (effectiveResult === "sucesso") {
+      logText = buildCombatLog({
+        origin: ship.name,
+        event: "MANOBRA EVASIVA",
+        status: "Dano evitado.",
+        details: `${incomingHitDetails} | Propulsores: ${ship.dodgeCharges}/3`,
+      });
+    } else {
+      const impactDetails = `${incomingHitDetails} | Dano rolado: ${damageResult.rawDamage} | Escudo: -${damageResult.shieldValue} | Dano: ${damageResult.finalDamage} HP | HP: ${ship.currentHP}/${ship.maxHP}`;
+      const dodgeTags = [
+        ...(damageResult.moduleTag ? [damageResult.moduleTag] : []),
+        ...(pending.isExtremo ? ["[EXTREMO!]"] : pending.isCritico ? ["[CRÍTICO!]"] : []),
+      ];
+      logText = buildCombatLog({
+        origin: ship.name,
+        event: effectiveResult === "falha"
+          ? "FALHA NA ESQUIVA"
+          : effectiveResult === "timer_expirou"
+            ? "JANELA DE REAÇÃO EXPIRADA"
+            : "DANO ACEITO",
+        status: effectiveResult === "falha" ? "Recebeu o impacto direto!" : "Recebeu o impacto!",
+        details: impactDetails,
+        tags: dodgeTags,
+      });
+    }
+  }
+
+  ship.pendingAttack = null;
+  ship.reactionStatus = null;
+
+  await setDoc(doc(db, "gameData", "ships"), ships);
+
+  if (ship.currentHP <= 0 && ship.status !== "destruida") {
+    setTimeout(async () => {
+      const currentShips = await getAllShips();
+      if (currentShips[shipId] && currentShips[shipId].currentHP <= 0) {
+        currentShips[shipId].status = "destruida";
+        currentShips[shipId].activeCrew = [];
+        await setDoc(doc(db, "gameData", "ships"), currentShips);
+      }
+    }, 4000);
+  }
+
+  const combatEvent = {
+    targetShipId: shipId,
+    attackerShipId: pending.attackerShipId || null,
+    targetName: ship.name,
+    damage: damageResult.finalDamage,
+    isAbsorbed: damageResult.rawDamage > 0 && damageResult.finalDamage === 0 && effectiveResult !== "extremo" && effectiveResult !== "sucesso",
+    timestamp: Date.now(),
+    logText,
+    isPlayerAction: false,
+    isDodgeResolution: true,
+    shieldHit: damageResult.isShieldHit,
+    shieldDestroyed: damageResult.moduleTag.includes("DESTRUÍDOS") && damageResult.isShieldHit,
+    enginesHit: damageResult.isEnginesHit,
+    enginesDestroyed: damageResult.moduleTag.includes("DESTRUÍDOS") && damageResult.isEnginesHit,
+  };
+
+  await setDoc(doc(db, "gameData", "lastCombatEvent"), combatEvent);
+  window.dispatchEvent(new CustomEvent("combat:event", { detail: combatEvent }));
+  return combatEvent;
+};
+
 export const getShipData = async (shipId) => {
   const ships = await getAllShips();
   const ship = ships[shipId];
@@ -366,6 +654,9 @@ export const getShipData = async (shipId) => {
   await setDoc(doc(db, "gameData", "ships"), ships);
   }
   if (ship) ensureNavigationFields(ship);
+  if (ship && enforceAttributeLimits(ship)) {
+    await setDoc(doc(db, "gameData", "ships"), ships);
+  }
   return ship;
 };
 
@@ -380,7 +671,7 @@ export const getCrewByShip = async (shipId) => {
 
 export const updateShipAttributes = async (shipId, newAttributes) => {
   const ships = await getAllShips();
-  if (ships[shipId]) { ships[shipId].attributes = newAttributes; 
+  if (ships[shipId]) { ships[shipId].attributes = newAttributes; enforceAttributeLimits(ships[shipId]);
     await setDoc(doc(db, "gameData", "ships"), ships); }
 };
 
@@ -606,6 +897,40 @@ export const processPlayerAttack = async (attackerShipId, targetShipId, inputDam
   const finalRawDamage = isExtremo ? maxDamage : parseInt(inputDamage || 0);
   const isCritico = !isExtremo && finalRawDamage >= (maxDamage * 0.8);
   const shieldValue = parseShield(getEffect(target.shipClass, "shields", target.attributes?.shields ?? 0));
+  if (attacker.isEnemy && !target.isEnemy) {
+    const pendingAttack = await triggerAttackAlert(targetShipId, {
+      attackerShipId,
+      attackerName: attacker.name,
+      rawDamage: finalRawDamage,
+      shieldValue,
+      isCritico,
+      isExtremo,
+      weaponEffect,
+      isMissile,
+    });
+
+    const logText = buildCombatLog({
+      origin: `${attacker.name} [ARMA FÍSICA: ${weaponEffect}]`,
+      event: "ATAQUE CONFIRMADO",
+      target: target.name,
+      status: "AGUARDANDO REAÇÃO...",
+      details: `Dano rolado: ${finalRawDamage}`,
+    });
+    const combatEvent = {
+      targetShipId: targetShipId,
+      attackerShipId: attackerShipId,
+      targetName: target.name,
+      damage: 0,
+      isAbsorbed: false,
+      timestamp: pendingAttack?.timestamp || Date.now(),
+      logText,
+      isAttackAlert: true,
+      isPlayerAction: false,
+    };
+    await setDoc(doc(db, "gameData", "lastCombatEvent"), combatEvent);
+    window.dispatchEvent(new CustomEvent("combat:event", { detail: combatEvent }));
+    return;
+  }
   const finalDamage = Math.max(0, finalRawDamage - shieldValue);
   target.currentHP = Math.max(0, (target.currentHP ?? target.maxHP) - finalDamage);
 
@@ -673,20 +998,21 @@ if (!attacker.isEnemy && target.isEnemy) {
   const proxVal = await getProximity(targetShipId, attackerShipId);
   proxInfo = ` [P${proxVal}]`;
 }
-  const logText = [
-    `${attacker.name} [ARMA FÍSICA: ${weaponEffect}]${proxInfo}`,
-    `→ ${target.name}`,
-    `| Dano ROLADO: ${finalRawDamage}`,
-    `| Escudo: -${shieldValue}`,
-    `| Dano: ${finalDamage} HP`,
-    `| HP: ${target.currentHP}/${target.maxHP}`,
-    ...tags,
-  ].join("  ");
+  const logText = buildCombatLog({
+    origin: `${attacker.name} [ARMA FÍSICA: ${weaponEffect}]${proxInfo}`,
+    event: "DISPARO",
+    target: target.name,
+    status: `Dano: ${finalDamage} HP`,
+    details: `Dano ROLADO: ${finalRawDamage} | Escudo: -${shieldValue} | HP: ${target.currentHP}/${target.maxHP}`,
+    tags,
+  });
 
   const combatEvent = {
+    targetShipId: targetShipId,
+    attackerShipId: attackerShipId,
     targetName: target.name, damage: finalDamage,
     isAbsorbed: finalRawDamage > 0 && finalDamage === 0,
-    timestamp: Date.now(), logText, isPlayerAction: true,
+    timestamp: Date.now(), logText, isPlayerAction: !attacker.isEnemy,
     shieldHit: moduleLog.includes("ESCUDO"),
     shieldDestroyed: moduleLog.includes("DESTRUÍDOS") && moduleLog.includes("ESCUDO"),
     enginesHit: moduleLog.includes("MOTORES"),
@@ -718,6 +1044,12 @@ export const repairAllShipsGlobal = async () => {
   Object.values(ships).forEach(ship => {
     if (ship.currentHP < ship.maxHP) { ship.currentHP = ship.maxHP; changed = true; }
     if (!ship.isEnemy && ship.status === "destruida") { ship.status = "ativa"; changed = true; }
+    if (!ship.isEnemy) {
+      ensureNavigationFields(ship);
+      if (ship.dodgeCharges !== 3) { ship.dodgeCharges = 3; changed = true; }
+      if (ship.pendingAttack !== null) { ship.pendingAttack = null; changed = true; }
+      if (ship.reactionStatus !== null) { ship.reactionStatus = null; changed = true; }
+    }
     if (ship.activeCrew) {
       ship.activeCrew.forEach(member => {
         if (member.moduleStatus !== 'operacional') { member.moduleStatus = 'operacional'; member.turnosParaReparo = 0; changed = true; }
