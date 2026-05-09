@@ -3,6 +3,7 @@ import "./App.css";
 import LoginScreen from "./components/LoginScreen";
 import ShipDashboard from "./components/ShipDashboard";
 import TerminalCombate from "./components/TerminalCombate";
+import ShipLoading from "./components/ShipLoading";
 
 // Importações do Firebase (Adicionamos o db, doc e setDoc aqui)
 import { auth, db } from "./utils/firebase"; 
@@ -72,8 +73,7 @@ const App = () => {
     }
   };
 
-  if (loading) return <div className="loading-screen">Iniciando Sistemas...</div>;
-
+if (loading) return <ShipLoading />; 
   if (window.location.pathname === '/terminal-combate') {
     return <TerminalCombate onBack={() => window.close()} />;
   }

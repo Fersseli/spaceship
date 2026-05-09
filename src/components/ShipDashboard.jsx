@@ -360,6 +360,14 @@ const [shipDataState, setShipDataState] = useState(null);
           if (!isCombatEventForThisShip(data)) return;
           mountTime.current = data.timestamp;
 
+// 🌟 1. ADICIONE ESTE BLOCO AQUI 🌟
+          // Se for apenas o alerta do tiro inimigo aguardando esquiva, não toca som nem overlay
+          if (data.isAttackAlert) {
+            setHeaderLog(data.logText); // Apenas atualiza o log lá no topo
+            return; // Impede a continuação para não dar "falhou!"
+          }
+          // 🌟 FIM DO BLOCO ADICIONADO 🌟
+
           let overlayText = "", overlayType = "hit";
           let extraTag = "", moduleMsg = "";
 
